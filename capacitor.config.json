@@ -1,0 +1,30 @@
+{
+  "appId": "com.callmonitor.app",
+  "appName": "Call Monitor",
+  "webDir": "out",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#0ea5e9",
+      "showSpinner": true,
+      "androidSpinnerStyle": "small",
+      "iosSpinnerStyle": "small",
+      "spinnerColor": "#ffffff"
+    },
+    "StatusBar": {
+      "style": "dark",
+      "backgroundColor": "#0ea5e9"
+    }
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": "",
+      "keystorePassword": "",
+      "keystoreAlias": "",
+      "keystoreAliasPassword": ""
+    }
+  }
+}
