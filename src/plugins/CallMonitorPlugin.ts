@@ -18,7 +18,11 @@ export interface CallMonitorPlugin {
     limit?: number;
     offset?: number;
     fromDate?: string;
-  }): Promise<{ logs: any[] }>;
+  }): Promise<{ callLogs: any[] }>;
+
+  // Call monitoring methods (auto-refresh)
+  startListeningForCalls(): Promise<{ success: boolean; message: string }>;
+  stopListeningForCalls(): Promise<{ success: boolean; message: string }>;
 
   // Recording methods
   startRecording(): Promise<{ success: boolean }>;
@@ -34,6 +38,14 @@ export interface CallMonitorPlugin {
     platform: string;
     osVersion: string;
   }>;
+  
+  // Event listeners
+  addListener(
+    eventName: 'callLogChanged' | 'phoneStateChanged',
+    listenerFunc: (data: any) => void
+  ): Promise<any>;
+  
+  removeAllListeners(): Promise<void>;
 }
 
 const CallMonitor = registerPlugin<CallMonitorPlugin>('CallMonitor', {

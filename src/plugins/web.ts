@@ -19,10 +19,10 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
     return { granted: false };
   }
 
-  async getCallLogs(options: any): Promise<{ logs: any[] }> {
+  async getCallLogs(options: any): Promise<{ callLogs: any[] }> {
     console.log('Web platform: Returning mock call logs', options);
     return {
-      logs: [
+      callLogs: [
         {
           id: '1',
           phone_number: '+1234567890',
@@ -41,6 +41,16 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
         },
       ],
     };
+  }
+
+  async startListeningForCalls(): Promise<{ success: boolean; message: string }> {
+    console.log('Web platform: Call listening not supported');
+    return { success: false, message: 'Not supported on web' };
+  }
+
+  async stopListeningForCalls(): Promise<{ success: boolean; message: string }> {
+    console.log('Web platform: Call listening not supported');
+    return { success: false, message: 'Not supported on web' };
   }
 
   async startRecording(): Promise<{ success: boolean }> {
