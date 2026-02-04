@@ -2,11 +2,12 @@ import { WebPlugin } from '@capacitor/core';
 import type { CallMonitorPlugin } from './CallMonitorPlugin';
 
 export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
-  async checkPermissions(): Promise<any> {
+  async checkAllPermissions(): Promise<any> {
     console.log('Web platform: Permissions not applicable');
     return {
       callLogs: false,
       phoneState: false,
+      contacts: false,
       recordAudio: false,
       storage: false,
       microphone: false,
@@ -14,7 +15,7 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
     };
   }
 
-  async requestPermissions(): Promise<{ granted: boolean }> {
+  async requestAllPermissionsPlugin(): Promise<{ granted: boolean }> {
     console.log('Web platform: Cannot request native permissions');
     return { granted: false };
   }

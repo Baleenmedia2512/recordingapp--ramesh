@@ -1,15 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Permission } from '@/types';
-
-// Import the native plugin (will be created next)
-let CallMonitorPlugin: any;
-
-if (Capacitor.isNativePlatform()) {
-  import('../plugins/CallMonitorPlugin').then((module) => {
-    CallMonitorPlugin = module.CallMonitor;
-  });
-}
+import { CallMonitor } from '@/plugins/CallMonitorPlugin';
 
 export const usePermissions = () => {
   const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -17,13 +9,22 @@ export const usePermissions = () => {
   const platform = Capacitor.getPlatform();
 
   const checkPermissions = async () => {
-    if (!Capacitor.isNativePlatform() || !CallMonitorPlugin) {
+    if (!Capacitor.isNativePlatform()) {
+      // For web platform, set default permissions
+      setPermissions([
+        {
+          name: 'Web Platform',
+          granted: false,
+          required: false,
+          description: 'Native permissions not available on web. Install on Android or iOS for full features.',
+        },
+      ]);
       return;
     }
 
     setIsChecking(true);
     try {
-      const result = await CallMonitorPlugin.checkPermissions();
+      const result = await CallMonitor.checkAllPermissions();
       
       if (platform === 'android') {
         setPermissions([
@@ -40,16 +41,22 @@ export const usePermissions = () => {
             description: 'Required to detect incoming/outgoing calls',
           },
           {
+            name: 'Contacts',
+            granted: result.contacts || false,
+            required: false,
+            description: 'Optional: Shows contact names for phone numbers',
+          },
+          {
             name: 'Record Audio',
             granted: result.recordAudio,
-            required: true,
-            description: 'Required to record call audio',
+            required: false,
+            description: 'Optional: Required to record call audio',
           },
           {
             name: 'Storage',
             granted: result.storage,
-            required: true,
-            description: 'Required to store call recordings',
+            required: false,
+            description: 'Optional: Required to store call recordings',
           },
         ]);
       } else if (platform === 'ios') {
@@ -76,12 +83,12 @@ export const usePermissions = () => {
   };
 
   const requestPermissions = async () => {
-    if (!Capacitor.isNativePlatform() || !CallMonitorPlugin) {
+    if (!Capacitor.isNativePlatform()) {
       return false;
     }
 
     try {
-      const result = await CallMonitorPlugin.requestPermissions();
+      const result = await CallMonitor.requestAllPermissionsPlugin();
       await checkPermissions();
       return result.granted;
     } catch (error) {
@@ -94,9 +101,10 @@ export const usePermissions = () => {
     checkPermissions();
   }, []);
 
-  const allRequiredGranted = permissions
-    .filter(p => p.required)
-    .every(p => p.granted);
+  const allRequiredGranted = permissions.length > 0 && 
+    permissions
+      .filter(p => p.required)
+      .every(p => p.granted);
 
   return {
     permissions,

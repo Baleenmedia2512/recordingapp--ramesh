@@ -2,16 +2,17 @@ import { registerPlugin } from '@capacitor/core';
 
 export interface CallMonitorPlugin {
   // Permission methods
-  checkPermissions(): Promise<{
+  checkAllPermissions(): Promise<{
     callLogs: boolean;
     phoneState: boolean;
+    contacts: boolean;
     recordAudio: boolean;
     storage: boolean;
     microphone: boolean;
     network: boolean;
   }>;
   
-  requestPermissions(): Promise<{ granted: boolean }>;
+  requestAllPermissionsPlugin(): Promise<{ granted: boolean }>;
 
   // Call log methods
   getCallLogs(options: {

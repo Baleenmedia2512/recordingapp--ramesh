@@ -1,18 +1,11 @@
 import React from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
-import LoginForm from '@/components/LoginForm';
 import Dashboard from '@/components/Dashboard';
 import PermissionsManager from '@/components/PermissionsManager';
 import { Capacitor } from '@capacitor/core';
 
 export default function Home() {
-  const { isAuthenticated, user, signOut } = useAuth();
   const { allRequiredGranted, platform } = usePermissions();
-
-  if (!isAuthenticated) {
-    return <LoginForm />;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -28,26 +21,19 @@ export default function Home() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                {user?.email}
-              </div>
-              <button
-                onClick={signOut}
-                className="text-sm text-red-600 hover:text-red-700 font-medium"
-              >
-                Sign Out
-              </button>
-            </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {Capacitor.isNativePlatform() && !allRequiredGranted ? (
+        {/* Show permissions manager on native platforms */}
+        {Capacitor.isNativePlatform() && (
           <PermissionsManager />
-        ) : (
+        )}
+        
+        {/* Show dashboard when permissions are granted or on web */}
+        {(!Capacitor.isNativePlatform() || allRequiredGranted) && (
           <Dashboard />
         )}
       </main>

@@ -91,7 +91,9 @@ export const useCallLogs = () => {
       // Try to fetch from native plugin first on mobile devices
       if (Capacitor.isNativePlatform()) {
         try {
+          console.log('Fetching call logs from native plugin...');
           const result = await CallMonitor.getCallLogs({ limit: 100 });
+          console.log('Native plugin result:', result);
           const nativeLogs = result.callLogs || [];
           
           // Transform native logs to match our CallLog type
@@ -112,6 +114,8 @@ export const useCallLogs = () => {
             updated_at: log.timestamp,
           })) as CallLog[];
           
+          console.log('Transformed logs:', transformedLogs.length, 'entries');
+          
           // Check for new calls
           if (previousCallLogsRef.current.length > 0 && transformedLogs.length > previousCallLogsRef.current.length) {
             const newCount = transformedLogs.length - previousCallLogsRef.current.length;
@@ -129,12 +133,21 @@ export const useCallLogs = () => {
             setIsLoading(false);
           }
           return;
-        } catch (nativeError) {
-          console.warn('Native call log fetch failed, falling back to API:', nativeError);
+        } catch (nativeError: any) {
+          console.error('Native call log fetch failed:', nativeError);
+          // On native platforms, if plugin fails, use mock data instead of API
+          setCallLogs(mockCallLogs);
+          setLastUpdated(new Date());
+          const errorMsg = nativeError?.message || 'Unknown error';
+          setError(`Could not access call logs: ${errorMsg}`);
+          if (!silent) {
+            setIsLoading(false);
+          }
+          return;
         }
       }
 
-      // Fallback to API/mock data
+      // Web platform or non-native: try API, fallback to mock data
       const token = localStorage.getItem('auth_token');
       
       if (!token) {
@@ -142,29 +155,42 @@ export const useCallLogs = () => {
         await new Promise(resolve => setTimeout(resolve, 500));
         setCallLogs(mockCallLogs);
         setLastUpdated(new Date());
+        if (!silent) {
+          setIsLoading(false);
+        }
         return;
       }
 
-      const response = await fetch('/api/call-logs', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      try {
+        const response = await fetch('/api/call-logs', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
 
-      if (!response.ok) {
-        // If API route doesn't exist (static build), use mock data
-        if (response.status === 404) {
-          setCallLogs(mockCallLogs);
-          setLastUpdated(new Date());
-          return;
+        if (!response.ok) {
+          // If API route doesn't exist (static build), use mock data
+          if (response.status === 404) {
+            setCallLogs(mockCallLogs);
+            setLastUpdated(new Date());
+            if (!silent) {
+              setIsLoading(false);
+            }
+            return;
+          }
+          throw new Error('Failed to fetch call logs');
         }
-        throw new Error('Failed to fetch call logs');
-      }
 
-      const logs = await response.json();
-      setCallLogs(logs);
-      setLastUpdated(new Date());
+        const logs = await response.json();
+        setCallLogs(logs);
+        setLastUpdated(new Date());
+      } catch (fetchError: any) {
+        console.warn('API fetch failed, using mock data:', fetchError);
+        // Fallback to mock data on any fetch error
+        setCallLogs(mockCallLogs);
+        setLastUpdated(new Date());
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch call logs');
       console.error('Error fetching call logs:', err);
