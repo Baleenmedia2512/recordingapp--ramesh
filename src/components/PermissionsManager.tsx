@@ -311,7 +311,7 @@ const PermissionsManager: React.FC = () => {
         </div>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-3">
         <button
           onClick={handleRequestPermissions}
           disabled={!Capacitor.isNativePlatform() || isRequesting}
@@ -330,6 +330,20 @@ const PermissionsManager: React.FC = () => {
           ) : (
             'Not Available on Web'
           )}
+        </button>
+        
+        {/* If user granted permissions manually, this button will re-check and proceed */}
+        <button
+          onClick={async () => {
+            setIsRequesting(true);
+            await checkPermissions();
+            setIsRequesting(false);
+          }}
+          disabled={isRequesting}
+          className="flex-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition-colors font-medium shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          <span>🔄</span>
+          <span>I Already Granted Permissions - Refresh</span>
         </button>
       </div>
 

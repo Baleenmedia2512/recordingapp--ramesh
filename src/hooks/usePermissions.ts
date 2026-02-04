@@ -78,6 +78,8 @@ export const usePermissions = () => {
     setIsChecking(true);
     try {
       const result = await CallMonitor.checkAllPermissions();
+      console.log('Permission check result:', JSON.stringify(result));
+      
       let newPermissions: Permission[] = [];
       
       if (platform === 'android') {
@@ -153,12 +155,18 @@ export const usePermissions = () => {
       const allRequiredGranted = requiredPermissions.every(p => p.granted);
       const someGranted = requiredPermissions.some(p => p.granted);
       
+      console.log('Required permissions:', requiredPermissions.map(p => `${p.name}: ${p.granted}`));
+      console.log('All required granted:', allRequiredGranted);
+      
       if (allRequiredGranted) {
+        console.log('Setting permission status to GRANTED');
         setPermissionStatus('granted');
         setDenialMessage(null);
       } else if (someGranted) {
+        console.log('Setting permission status to PARTIAL');
         setPermissionStatus('partial');
       } else {
+        console.log('Setting permission status to DENIED');
         setPermissionStatus('denied');
       }
       
