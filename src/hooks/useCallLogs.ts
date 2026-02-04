@@ -109,7 +109,7 @@ export const useCallLogs = () => {
     };
   };
 
-  const fetchCallLogs = useCallback(async (customFilters?: DashboardFilters, silent = false) => {
+  const fetchCallLogs = useCallback(async (customFilters?: DashboardFilters, silent = false, forceRefresh = false) => {
     if (!silent) {
       setIsLoading(true);
       loadStartTimeRef.current = performance.now();
@@ -128,8 +128,18 @@ export const useCallLogs = () => {
       // Try to fetch from native plugin first on mobile devices
       if (Capacitor.isNativePlatform()) {
         try {
+          // Clear cache first if forceRefresh is requested
+          if (forceRefresh) {
+            console.log('Force refresh requested, clearing recordings cache...');
+            try {
+              await CallMonitor.clearRecordingsCache();
+            } catch (e) {
+              console.warn('Could not clear recordings cache:', e);
+            }
+          }
+          
           console.log('Fetching call logs from native plugin...');
-          const result = await CallMonitor.getCallLogs({ limit: 100 });
+          const result = await CallMonitor.getCallLogs({ limit: 100, forceRefresh });
           console.log('Native plugin result:', result);
           const nativeLogs = result.callLogs || [];
           
@@ -267,8 +277,8 @@ export const useCallLogs = () => {
     }
   }, [filters, setCallLogs, setIsLoading]);
 
-  const refreshCallLogs = useCallback(() => {
-    fetchCallLogs(filters);
+  const refreshCallLogs = useCallback((forceRefresh = false) => {
+    fetchCallLogs(filters, false, forceRefresh);
   }, [fetchCallLogs, filters]);
 
   // Set up native event listeners for real-time updates
@@ -279,24 +289,37 @@ export const useCallLogs = () => {
 
     const setupListeners = async () => {
       try {
+        // Import App plugin for app state changes
+        const { App } = await import('@capacitor/app');
+        
+        // Listen for app resume - force refresh recordings when returning to app
+        App.addListener('appStateChange', async ({ isActive }) => {
+          if (isActive) {
+            console.log('App resumed, force refreshing call logs and recordings...');
+            // Force refresh to get new recordings
+            fetchCallLogs(filters, false, true);
+          }
+        });
+        
         // Start listening for call state changes
         await CallMonitor.startListeningForCalls();
         
         // Listen for call log changes
         const callLogListener = await CallMonitor.addListener('callLogChanged', (data) => {
           console.log('Call log changed:', data);
-          // Silently refresh in background
-          fetchCallLogs(filters, true);
+          // Force refresh in background to get new recordings
+          fetchCallLogs(filters, true, true);
         });
         
         // Listen for phone state changes
         const phoneStateListener = await CallMonitor.addListener('phoneStateChanged', (data) => {
           console.log('Phone state changed:', data);
           if (data.type === 'call_ended') {
-            // Wait a moment for the call log to be written, then refresh
+            // Wait a moment for the call log and recording to be written, then force refresh
             setTimeout(() => {
-              fetchCallLogs(filters, true);
-            }, 2000);
+              console.log('Call ended, force refreshing to get new recording...');
+              fetchCallLogs(filters, true, true);
+            }, CALL_END_REFRESH_DELAY_MS);
           }
         });
         

@@ -58,8 +58,8 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
     };
   }
 
-  async getRecordings(): Promise<{ recordings: RecordingInfo[]; count: number }> {
-    console.log('Web platform: Returning mock recordings');
+  async getRecordings(options?: { forceRefresh?: boolean }): Promise<{ recordings: RecordingInfo[]; count: number }> {
+    console.log('Web platform: Returning mock recordings', options);
     return {
       recordings: [
         {
@@ -71,6 +71,11 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
       ],
       count: 1,
     };
+  }
+  
+  async clearRecordingsCache(): Promise<{ success: boolean }> {
+    console.log('Web platform: Clearing recordings cache (no-op)');
+    return { success: true };
   }
 
   async startListeningForCalls(): Promise<{ success: boolean; message: string }> {

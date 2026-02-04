@@ -153,7 +153,7 @@ const Dashboard: React.FC = () => {
                 </div>
               )}
               <button
-                onClick={refreshCallLogs}
+                onClick={() => refreshCallLogs(true)}
                 disabled={isLoading}
                 className="bg-primary-500 text-white px-6 py-3 rounded-lg hover:bg-primary-600 transition-colors font-medium disabled:opacity-50 shadow-sm flex items-center gap-2"
               >
@@ -223,7 +223,7 @@ const Dashboard: React.FC = () => {
                 )}
               </div>
               <button
-                onClick={refreshCallLogs}
+                onClick={() => refreshCallLogs(true)}
                 className="text-yellow-700 hover:text-yellow-900 text-sm underline"
               >
                 Try Again

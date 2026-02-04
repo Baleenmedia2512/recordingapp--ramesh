@@ -26,10 +26,14 @@ export interface CallMonitorPlugin {
     limit?: number;
     offset?: number;
     fromDate?: string;
+    forceRefresh?: boolean;
   }): Promise<{ callLogs: any[] }>;
 
   // Recording detection methods
-  getRecordings(): Promise<{ recordings: RecordingInfo[]; count: number }>;
+  getRecordings(options?: { forceRefresh?: boolean }): Promise<{ recordings: RecordingInfo[]; count: number }>;
+  
+  // Clear recordings cache (call when app resumes to get fresh data)
+  clearRecordingsCache(): Promise<{ success: boolean }>;
 
   // Call monitoring methods (auto-refresh)
   startListeningForCalls(): Promise<{ success: boolean; message: string }>;
