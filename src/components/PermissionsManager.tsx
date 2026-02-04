@@ -44,59 +44,56 @@ const PermissionsManager: React.FC = () => {
 
   if (isChecking) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mr-3"></div>
-        <div className="text-gray-600">Checking permissions...</div>
+      <div className="flex items-center justify-center p-4 sm:p-8">
+        <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-primary-500 mr-3"></div>
+        <div className="text-gray-600 text-sm sm:text-base">Checking permissions...</div>
       </div>
     );
   }
 
   if (allRequiredGranted) {
     return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-        <div className="flex items-center justify-between">
+      <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-0">
           <div className="flex items-center gap-2 text-green-700">
-            <span className="text-2xl">✅</span>
+            <span className="text-xl sm:text-2xl">✅</span>
             <div>
-              <span className="font-medium">All required permissions granted</span>
-              <p className="text-sm text-green-600">
+              <span className="font-medium text-sm sm:text-base">All required permissions granted</span>
+              <p className="text-xs sm:text-sm text-green-600">
                 {platform === 'android' ? 'Full call log access enabled' : 'Limited features on iOS'}
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 mt-2 sm:mt-0">
             <button
               onClick={() => checkPermissions()}
-              className="text-sm text-green-600 hover:text-green-700 px-3 py-1 border border-green-300 rounded hover:bg-green-100"
+              className="text-xs sm:text-sm text-green-600 hover:text-green-700 px-2 sm:px-3 py-1 border border-green-300 rounded hover:bg-green-100"
               title="Re-check permissions"
             >
-              🔄 Refresh
+              🔄
             </button>
             <button
               onClick={() => setShowDetails(!showDetails)}
-              className="text-sm text-green-600 hover:text-green-700 underline"
+              className="text-xs sm:text-sm text-green-600 hover:text-green-700 underline"
             >
-              {showDetails ? 'Hide' : 'Show'} Details
+              {showDetails ? 'Hide' : 'Show'}
             </button>
           </div>
         </div>
         
         {showDetails && (
-          <div className="mt-4 space-y-2">
+          <div className="mt-3 sm:mt-4 space-y-2">
             <div className="text-xs text-green-700 mb-2 p-2 bg-green-100 rounded">
               💡 To revoke permissions, go to Settings → Apps → Call Monitor → Permissions
             </div>
             {permissions.map((permission) => (
-              <div key={permission.name} className="flex items-center gap-2 text-sm p-2 bg-white rounded border border-green-100">
+              <div key={permission.name} className="flex items-center gap-2 text-xs sm:text-sm p-2 bg-white rounded border border-green-100">
                 <span className={permission.granted ? 'text-green-600' : 'text-gray-400'}>
                   {permission.granted ? '✓' : '✗'}
                 </span>
-                <span className="text-gray-700 font-medium">{permission.name}</span>
-                <span className="text-gray-500 text-xs">
-                  {permission.granted ? 'Enabled' : 'Disabled'}
-                </span>
+                <span className="text-gray-700 font-medium flex-1">{permission.name}</span>
                 {permission.required && (
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-auto">
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
                     Required
                   </span>
                 )}
@@ -106,20 +103,20 @@ const PermissionsManager: React.FC = () => {
         )}
 
         {/* Platform Capabilities Summary */}
-        <div className="mt-4 pt-4 border-t border-green-200">
-          <h4 className="text-sm font-semibold text-green-800 mb-2">🔧 Available Features</h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-green-200">
+          <h4 className="text-xs sm:text-sm font-semibold text-green-800 mb-2">🔧 Available Features</h4>
+          <div className="grid grid-cols-2 gap-1 sm:gap-2 text-xs sm:text-sm">
             <div className={platformCapabilities.canAccessCallLogs ? 'text-green-700' : 'text-gray-400'}>
-              {platformCapabilities.canAccessCallLogs ? '✓' : '✗'} Call Log Access
+              {platformCapabilities.canAccessCallLogs ? '✓' : '✗'} Call Logs
             </div>
             <div className={platformCapabilities.canRecordCalls ? 'text-green-700' : 'text-gray-400'}>
-              {platformCapabilities.canRecordCalls ? '✓' : '✗'} Call Recording
+              {platformCapabilities.canRecordCalls ? '✓' : '✗'} Recording
             </div>
             <div className={platformCapabilities.canAccessRecordings ? 'text-green-700' : 'text-gray-400'}>
-              {platformCapabilities.canAccessRecordings ? '✓' : '✗'} Recording Playback
+              {platformCapabilities.canAccessRecordings ? '✓' : '✗'} Playback
             </div>
             <div className={platformCapabilities.canSyncData ? 'text-green-700' : 'text-gray-400'}>
-              {platformCapabilities.canSyncData ? '✓' : '✗'} Data Sync
+              {platformCapabilities.canSyncData ? '✓' : '✗'} Sync
             </div>
           </div>
         </div>

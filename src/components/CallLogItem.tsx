@@ -97,7 +97,7 @@ const CallLogItem: React.FC<CallLogItemProps> = ({ log, onPlayRecording, isNew =
   };
 
   return (
-    <div className={`bg-white border rounded-lg p-4 hover:shadow-md transition-all ${
+    <div className={`bg-white border rounded-lg p-3 sm:p-4 hover:shadow-md transition-all ${
       isNew ? 'border-blue-400 shadow-lg animate-pulse' : 'border-gray-200'
     }`}>
       {isNew && (
@@ -106,72 +106,74 @@ const CallLogItem: React.FC<CallLogItemProps> = ({ log, onPlayRecording, isNew =
         </div>
       )}
       
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-3xl">{getCallTypeIcon(log.call_type)}</span>
-            <div className="flex-1">
-              <h3 className="font-semibold text-lg text-gray-900">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <span className="text-2xl sm:text-3xl">{getCallTypeIcon(log.call_type)}</span>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-base sm:text-lg text-gray-900 truncate">
                 {log.contact_name || log.phone_number}
               </h3>
               {log.contact_name && (
-                <p className="text-sm text-gray-600 font-mono">{log.phone_number}</p>
+                <p className="text-xs sm:text-sm text-gray-600 font-mono truncate">{log.phone_number}</p>
               )}
             </div>
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getCallTypeColor(log.call_type)}`}>
+            <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium border whitespace-nowrap ${getCallTypeColor(log.call_type)}`}>
               {log.call_type.charAt(0).toUpperCase() + log.call_type.slice(1)}
             </span>
           </div>
           
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm mt-3">
             <div className="flex flex-col">
-              <span className="text-gray-500 text-xs font-medium mb-1">📅 Date</span>
+              <span className="text-gray-500 text-xs font-medium mb-0.5 sm:mb-1">📅 Date</span>
               <span className="text-gray-900 font-medium">{formatDate(log.timestamp)}</span>
             </div>
             
             <div className="flex flex-col">
-              <span className="text-gray-500 text-xs font-medium mb-1">🕐 Time</span>
+              <span className="text-gray-500 text-xs font-medium mb-0.5 sm:mb-1">🕐 Time</span>
               <span className="text-gray-900 font-medium">{formatTime(log.timestamp)}</span>
             </div>
             
             <div className="flex flex-col">
-              <span className="text-gray-500 text-xs font-medium mb-1">⏱️ Duration</span>
+              <span className="text-gray-500 text-xs font-medium mb-0.5 sm:mb-1">⏱️ Duration</span>
               <span className="text-gray-900 font-medium">{formatDuration(log.duration)}</span>
             </div>
             
             <div className="flex flex-col">
-              <span className="text-gray-500 text-xs font-medium mb-1">📱 Platform</span>
+              <span className="text-gray-500 text-xs font-medium mb-0.5 sm:mb-1">📱 Platform</span>
               <span className="text-gray-900 font-medium">
                 {log.device_platform === 'android' ? '🤖 Android' : log.device_platform === 'ios' ? '🍎 iOS' : '🌐 Web'}
               </span>
             </div>
           </div>
 
-          <div className="mt-3 text-xs text-gray-500">
+          <div className="mt-2 sm:mt-3 text-xs text-gray-500">
             {formatTimestamp(log.timestamp)}
           </div>
         </div>
 
-        <div className="ml-4 flex flex-col gap-2">
+        <div className="flex sm:flex-col gap-2 sm:ml-4">
           {log.has_recording && log.recording_url ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 flex-1 sm:flex-none">
               <button
                 onClick={() => onPlayRecording(log)}
-                className="bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors flex items-center gap-2 font-medium shadow-sm"
+                className="bg-primary-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors flex items-center justify-center gap-2 font-medium shadow-sm text-sm w-full"
               >
                 <span>▶️</span>
-                <span>Play Recording</span>
+                <span>Play</span>
               </button>
               <div className="text-xs text-green-600 flex items-center gap-1 justify-center">
                 <span>🎙️</span>
-                <span>Recording available</span>
+                <span className="hidden sm:inline">Recording available</span>
+                <span className="sm:hidden">Available</span>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              <div className="text-gray-400 text-sm px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-center">
+            <div className="flex-1 sm:flex-none">
+              <div className="text-gray-400 text-xs sm:text-sm px-3 sm:px-4 py-2 border border-gray-200 rounded-lg bg-gray-50 text-center">
                 <span className="block">🔇</span>
-                <span>No recording available</span>
+                <span className="hidden sm:inline">No recording available</span>
+                <span className="sm:hidden">No recording</span>
               </div>
             </div>
           )}

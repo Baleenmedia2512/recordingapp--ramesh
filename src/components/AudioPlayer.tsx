@@ -76,18 +76,18 @@ const AudioPlayer: React.FC = () => {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t-2 border-primary-500 shadow-2xl z-50">
-      <div className="max-w-7xl mx-auto px-4 py-4">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 sm:py-4">
         {/* Error Message */}
         {error && (
-          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-            <span className="text-red-500 text-xl">⚠️</span>
-            <div>
-              <p className="text-red-700 font-medium">Playback Error</p>
-              <p className="text-red-600 text-sm">{error}</p>
+          <div className="mb-2 sm:mb-3 p-2 sm:p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+            <span className="text-red-500 text-lg sm:text-xl">⚠️</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-red-700 font-medium text-sm">Playback Error</p>
+              <p className="text-red-600 text-xs truncate">{error}</p>
             </div>
             <button 
               onClick={stop}
-              className="ml-auto text-red-500 hover:text-red-700 text-sm underline"
+              className="text-red-500 hover:text-red-700 text-xs underline whitespace-nowrap"
             >
               Dismiss
             </button>
@@ -98,13 +98,13 @@ const AudioPlayer: React.FC = () => {
         {isLoading && (
           <div className="mb-2 flex items-center gap-2 text-blue-600">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-            <span className="text-sm">Loading audio...</span>
+            <span className="text-xs sm:text-sm">Loading audio...</span>
           </div>
         )}
         
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-4">
           {/* Main Controls: Play/Pause, Stop */}
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-1 sm:gap-2 items-center">
             {/* Skip Backward */}
             <button
               onClick={() => skipBackward(10)}
@@ -119,7 +119,7 @@ const AudioPlayer: React.FC = () => {
             <button
               onClick={handlePlayPause}
               disabled={isLoading}
-              className={`w-12 h-12 rounded-full flex items-center justify-center text-lg shadow-md transition-all ${
+              className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-base sm:text-lg shadow-md transition-all ${
                 isLoading
                   ? 'bg-gray-300 text-gray-500 cursor-wait'
                   : isPlaying
@@ -129,7 +129,7 @@ const AudioPlayer: React.FC = () => {
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isLoading ? (
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                <div className="animate-spin rounded-full h-4 w-4 sm:h-5 sm:w-5 border-2 border-white border-t-transparent"></div>
               ) : isPlaying ? (
                 '⏸️'
               ) : (
@@ -140,7 +140,7 @@ const AudioPlayer: React.FC = () => {
             {/* Stop Button */}
             <button
               onClick={stop}
-              className="w-10 h-10 rounded-full bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center transition-all"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-red-100 text-red-600 hover:bg-red-200 flex items-center justify-center transition-all"
               title="Stop"
             >
               ⏹️
@@ -158,14 +158,14 @@ const AudioPlayer: React.FC = () => {
           </div>
 
           {/* Time Display */}
-          <div className="text-sm font-mono text-gray-700 min-w-[110px] bg-gray-100 px-3 py-1 rounded">
+          <div className="text-xs sm:text-sm font-mono text-gray-700 bg-gray-100 px-2 sm:px-3 py-1 rounded whitespace-nowrap">
             <span className="text-primary-600">{formatTime(currentTime)}</span>
             <span className="text-gray-400"> / </span>
             <span>{formatTime(duration)}</span>
           </div>
 
           {/* Progress Bar */}
-          <div className="flex-1 flex flex-col gap-1">
+          <div className="flex-1 min-w-[100px] order-last sm:order-none w-full sm:w-auto mt-2 sm:mt-0">
             <div
               ref={progressRef}
               onClick={handleProgressClick}
@@ -188,8 +188,8 @@ const AudioPlayer: React.FC = () => {
             </div>
           </div>
 
-          {/* Volume Control */}
-          <div className="flex items-center gap-2">
+          {/* Volume Control - Hidden on mobile */}
+          <div className="hidden sm:flex items-center gap-2">
             <button
               onClick={() => setVolume(volume === 0 ? 1 : 0)}
               className="text-gray-600 hover:text-gray-800"
@@ -204,15 +204,15 @@ const AudioPlayer: React.FC = () => {
               step="0.05"
               value={volume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-20 h-2 accent-primary-500"
+              className="w-16 sm:w-20 h-2 accent-primary-500"
               title={`Volume: ${Math.round(volume * 100)}%`}
             />
           </div>
 
-          {/* Status Indicator */}
-          <div className={`text-sm font-medium flex items-center gap-1 min-w-[90px] ${stateDisplay.color}`}>
+          {/* Status Indicator - Simplified on mobile */}
+          <div className={`text-xs sm:text-sm font-medium flex items-center gap-1 ${stateDisplay.color}`}>
             <span>{stateDisplay.icon}</span>
-            <span>{stateDisplay.text}</span>
+            <span className="hidden sm:inline">{stateDisplay.text}</span>
           </div>
 
           {/* Close Button */}

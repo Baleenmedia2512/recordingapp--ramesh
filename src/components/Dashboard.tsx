@@ -127,12 +127,12 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between flex-wrap gap-4">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-4 sm:py-8 pb-32">
+        <div className="mb-4 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Call Monitor</h1>
-              <p className="text-gray-600 mt-1">
+              <h1 className="text-xl sm:text-3xl font-bold text-gray-900">📱 Call Monitor</h1>
+              <p className="text-sm sm:text-base text-gray-600 mt-1">
                 View and manage your call history
               </p>
               {lastUpdated && (
@@ -146,19 +146,19 @@ const Dashboard: React.FC = () => {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-end">
               {newCallsCount > 0 && (
-                <div className="bg-blue-500 text-white px-4 py-2 rounded-full font-semibold text-sm shadow-lg animate-bounce">
-                  +{newCallsCount} New Call{newCallsCount > 1 ? 's' : ''}
+                <div className="bg-blue-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-semibold text-xs sm:text-sm shadow-lg animate-bounce">
+                  +{newCallsCount} New
                 </div>
               )}
               <button
                 onClick={() => refreshCallLogs(true)}
                 disabled={isLoading}
-                className="bg-primary-500 text-white px-6 py-3 rounded-lg hover:bg-primary-600 transition-colors font-medium disabled:opacity-50 shadow-sm flex items-center gap-2"
+                className="bg-primary-500 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg hover:bg-primary-600 transition-colors font-medium disabled:opacity-50 shadow-sm flex items-center gap-2 text-sm sm:text-base"
               >
                 <span className={isLoading ? 'animate-spin' : ''}>🔄</span>
-                <span>{isLoading ? 'Refreshing...' : 'Refresh'}</span>
+                <span className="hidden sm:inline">{isLoading ? 'Refreshing...' : 'Refresh'}</span>
               </button>
             </div>
           </div>
@@ -178,13 +178,13 @@ const Dashboard: React.FC = () => {
         <CallLogFilters />
 
         {/* View Mode Toggle */}
-        <div className="mb-4 flex items-center justify-between bg-white rounded-lg p-3 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">View:</span>
-            <div className="flex rounded-lg overflow-hidden border border-gray-300">
+        <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 bg-white rounded-lg p-2 sm:p-3 shadow-sm">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <span className="text-xs sm:text-sm font-medium text-gray-700">View:</span>
+            <div className="flex rounded-lg overflow-hidden border border-gray-300 flex-1 sm:flex-none">
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors ${
                   viewMode === 'list'
                     ? 'bg-primary-500 text-white'
                     : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -194,7 +194,7 @@ const Dashboard: React.FC = () => {
               </button>
               <button
                 onClick={() => setViewMode('table')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors ${
                   viewMode === 'table'
                     ? 'bg-primary-500 text-white'
                     : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -204,8 +204,8 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
           </div>
-          <div className="text-sm text-gray-600">
-            <span className="font-medium">{sortedCallLogs.length}</span> total call{sortedCallLogs.length !== 1 ? 's' : ''}
+          <div className="text-xs sm:text-sm text-gray-600">
+            <span className="font-medium">{sortedCallLogs.length}</span> call{sortedCallLogs.length !== 1 ? 's' : ''}
           </div>
         </div>
 
@@ -267,8 +267,8 @@ const Dashboard: React.FC = () => {
         ) : (
           /* Table View - Scrollable */
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="max-h-[600px] overflow-y-auto">
-              <table className="w-full">
+            <div className="max-h-[60vh] sm:max-h-[600px] overflow-auto">
+              <table className="w-full min-w-[600px]">
                 <thead className="bg-gray-100 sticky top-0 z-10">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
