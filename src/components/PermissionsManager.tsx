@@ -7,23 +7,38 @@ const PermissionsManager: React.FC = () => {
     permissions,
     isChecking,
     allRequiredGranted,
+    permissionStatus,
+    wasRevoked,
+    denialMessage,
+    platformCapabilities,
     requestPermissions,
+    openAppSettings,
+    clearDenialMessage,
+    checkPermissions,
     platform,
   } = usePermissions();
   const [showDetails, setShowDetails] = useState(false);
-  const [requestError, setRequestError] = useState<string | null>(null);
+  const [isRequesting, setIsRequesting] = useState(false);
 
   const handleRequestPermissions = async () => {
-    setRequestError(null);
+    setIsRequesting(true);
     try {
-      const granted = await requestPermissions();
-      if (!granted) {
-        setRequestError(
-          'Some permissions were denied. Please enable them in your device settings to use all features.'
-        );
+      const result = await requestPermissions();
+      if (!result.granted && result.deniedPermissions.length > 0) {
+        // Denial message is set by the hook
       }
     } catch (error) {
-      setRequestError('Failed to request permissions. Please try again.');
+      console.error('Permission request failed:', error);
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  const handleRetryPermissions = async () => {
+    clearDenialMessage();
+    await checkPermissions();
+    if (!allRequiredGranted) {
+      handleRequestPermissions();
     }
   };
 
@@ -42,40 +57,111 @@ const PermissionsManager: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-green-700">
             <span className="text-2xl">✅</span>
-            <span className="font-medium">All required permissions granted</span>
+            <div>
+              <span className="font-medium">All required permissions granted</span>
+              <p className="text-sm text-green-600">
+                {platform === 'android' ? 'Full call log access enabled' : 'Limited features on iOS'}
+              </p>
+            </div>
           </div>
-          <button
-            onClick={() => setShowDetails(!showDetails)}
-            className="text-sm text-green-600 hover:text-green-700 underline"
-          >
-            {showDetails ? 'Hide' : 'Show'} Details
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => checkPermissions()}
+              className="text-sm text-green-600 hover:text-green-700 px-3 py-1 border border-green-300 rounded hover:bg-green-100"
+              title="Re-check permissions"
+            >
+              🔄 Refresh
+            </button>
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="text-sm text-green-600 hover:text-green-700 underline"
+            >
+              {showDetails ? 'Hide' : 'Show'} Details
+            </button>
+          </div>
         </div>
         
         {showDetails && (
           <div className="mt-4 space-y-2">
+            <div className="text-xs text-green-700 mb-2 p-2 bg-green-100 rounded">
+              💡 To revoke permissions, go to Settings → Apps → Call Monitor → Permissions
+            </div>
             {permissions.map((permission) => (
-              <div key={permission.name} className="flex items-center gap-2 text-sm">
-                <span>{permission.granted ? '✓' : '✗'}</span>
-                <span className="text-gray-700">{permission.name}</span>
+              <div key={permission.name} className="flex items-center gap-2 text-sm p-2 bg-white rounded border border-green-100">
+                <span className={permission.granted ? 'text-green-600' : 'text-gray-400'}>
+                  {permission.granted ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-700 font-medium">{permission.name}</span>
+                <span className="text-gray-500 text-xs">
+                  {permission.granted ? 'Enabled' : 'Disabled'}
+                </span>
+                {permission.required && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded ml-auto">
+                    Required
+                  </span>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        {/* Platform Capabilities Summary */}
+        <div className="mt-4 pt-4 border-t border-green-200">
+          <h4 className="text-sm font-semibold text-green-800 mb-2">🔧 Available Features</h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className={platformCapabilities.canAccessCallLogs ? 'text-green-700' : 'text-gray-400'}>
+              {platformCapabilities.canAccessCallLogs ? '✓' : '✗'} Call Log Access
+            </div>
+            <div className={platformCapabilities.canRecordCalls ? 'text-green-700' : 'text-gray-400'}>
+              {platformCapabilities.canRecordCalls ? '✓' : '✗'} Call Recording
+            </div>
+            <div className={platformCapabilities.canAccessRecordings ? 'text-green-700' : 'text-gray-400'}>
+              {platformCapabilities.canAccessRecordings ? '✓' : '✗'} Recording Playback
+            </div>
+            <div className={platformCapabilities.canSyncData ? 'text-green-700' : 'text-gray-400'}>
+              {platformCapabilities.canSyncData ? '✓' : '✗'} Data Sync
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+      {/* Permission Revoked Alert */}
+      {wasRevoked && (
+        <div className="mb-4 p-4 bg-orange-50 border-2 border-orange-300 rounded-lg animate-pulse">
+          <div className="flex items-start gap-2">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="font-bold text-orange-900">Permissions Revoked</p>
+              <p className="text-sm text-orange-800">
+                Some required permissions were disabled. The app cannot function without them.
+              </p>
+              <button
+                onClick={handleRetryPermissions}
+                className="mt-2 text-sm bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600"
+              >
+                🔓 Re-enable Permissions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start gap-3 mb-4">
         <span className="text-3xl">🔒</span>
         <div>
           <h2 className="text-xl font-semibold text-gray-900 mb-1">
-            Permissions Required
+            {permissionStatus === 'denied' ? 'Permissions Required' : 
+             permissionStatus === 'partial' ? 'Some Permissions Missing' :
+             'Grant Permissions to Continue'}
           </h2>
           <p className="text-sm text-gray-700">
-            To view your call history, we need access to the following permissions
+            {permissionStatus === 'denied' 
+              ? 'To view your call history, we need access to the following permissions'
+              : 'Some required permissions are missing. Please grant them to use all features.'}
           </p>
         </div>
       </div>
@@ -102,14 +188,24 @@ const PermissionsManager: React.FC = () => {
             <div>
               <p className="font-semibold text-purple-900 mb-1">iOS Device Detected</p>
               <p className="text-sm text-purple-800 mb-2">
-                <strong>Important iOS Limitations:</strong>
+                <strong>Important: Apple Privacy Restrictions</strong>
               </p>
-              <ul className="text-sm text-purple-800 list-disc list-inside space-y-1">
-                <li>iOS does not allow apps to access system call logs</li>
-                <li>iOS does not allow recording of regular phone calls</li>
-                <li>You can view synced call logs from your Android devices</li>
-                <li>Recording is only possible for VoIP calls (WhatsApp, Skype, etc.)</li>
-              </ul>
+              <div className="bg-white p-3 rounded border border-purple-200 mb-2">
+                <p className="text-xs text-purple-900 font-semibold mb-2">❌ Not Available on iOS:</p>
+                <ul className="text-xs text-purple-700 list-disc list-inside space-y-1">
+                  {platformCapabilities.limitations.map((limitation, index) => (
+                    <li key={index}>{limitation}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="bg-green-50 p-3 rounded border border-green-200">
+                <p className="text-xs text-green-900 font-semibold mb-1">✓ Available on iOS:</p>
+                <ul className="text-xs text-green-700 list-disc list-inside space-y-1">
+                  <li>View call logs synced from your Android devices</li>
+                  <li>Play call recordings synced from Android</li>
+                  <li>Sync data across devices</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -176,19 +272,40 @@ const PermissionsManager: React.FC = () => {
         ))}
       </div>
 
-      {requestError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+      {denialMessage && (
+        <div className="mb-4 p-4 bg-red-50 border-2 border-red-300 rounded-lg">
           <div className="flex items-start gap-2">
-            <span className="text-xl">⚠️</span>
+            <span className="text-xl">🚫</span>
             <div className="flex-1">
-              <p className="text-sm text-red-700 font-medium mb-1">Permission Error</p>
-              <p className="text-sm text-red-600">{requestError}</p>
-              <p className="text-xs text-red-600 mt-2">
-                To enable permissions manually:
-                <br />• Open your device Settings
-                <br />• Find Call Monitor app
-                <br />• Enable the required permissions
-              </p>
+              <p className="text-sm text-red-700 font-bold mb-1">Permission Denied</p>
+              <p className="text-sm text-red-600 mb-3">{denialMessage}</p>
+              
+              <div className="bg-white p-3 rounded border border-red-200 mb-3">
+                <p className="text-xs text-red-900 font-semibold mb-2">📱 How to enable permissions manually:</p>
+                <ol className="text-xs text-red-700 list-decimal list-inside space-y-1">
+                  <li>Open your device <strong>Settings</strong></li>
+                  <li>Go to <strong>Apps</strong> or <strong>Application Manager</strong></li>
+                  <li>Find and tap <strong>Call Monitor</strong></li>
+                  <li>Tap <strong>Permissions</strong></li>
+                  <li>Enable all required permissions</li>
+                  <li>Return to this app</li>
+                </ol>
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={handleRetryPermissions}
+                  className="text-sm bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+                >
+                  🔄 Try Again
+                </button>
+                <button
+                  onClick={clearDenialMessage}
+                  className="text-sm border border-red-300 text-red-600 px-4 py-2 rounded hover:bg-red-100"
+                >
+                  ✕ Dismiss
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -197,23 +314,58 @@ const PermissionsManager: React.FC = () => {
       <div className="flex gap-4">
         <button
           onClick={handleRequestPermissions}
-          disabled={!Capacitor.isNativePlatform()}
-          className="flex-1 bg-primary-500 text-white px-6 py-4 rounded-lg hover:bg-primary-600 transition-colors font-semibold text-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!Capacitor.isNativePlatform() || isRequesting}
+          className="flex-1 bg-primary-500 text-white px-6 py-4 rounded-lg hover:bg-primary-600 transition-colors font-semibold text-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {Capacitor.isNativePlatform() ? '🔓 Grant Permissions' : 'Not Available on Web'}
+          {isRequesting ? (
+            <>
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+              <span>Requesting...</span>
+            </>
+          ) : Capacitor.isNativePlatform() ? (
+            <>
+              <span>🔓</span>
+              <span>Grant Permissions</span>
+            </>
+          ) : (
+            'Not Available on Web'
+          )}
         </button>
       </div>
 
+      {/* Consent & Privacy Notice */}
       <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border border-blue-200">
         <div className="flex items-start gap-2">
-          <span className="text-xl">🔒</span>
+          <span className="text-xl">🛡️</span>
           <div>
-            <p className="text-sm font-semibold text-gray-900 mb-1">Privacy & Security</p>
-            <p className="text-xs text-gray-700 leading-relaxed">
-              Your call logs and recordings are stored securely on your device with end-to-end encryption.
-              All data syncing is protected by industry-standard encryption. You maintain full control
-              over your data and can revoke permissions at any time through your device settings.
-              We never share your data with third parties.
+            <p className="text-sm font-semibold text-gray-900 mb-2">Your Privacy & Consent</p>
+            <div className="text-xs text-gray-700 leading-relaxed space-y-2">
+              <p>
+                <strong>Data Storage:</strong> Your call logs and recordings are stored securely on your device 
+                with encryption. We never access or store your data on external servers without your explicit consent.
+              </p>
+              <p>
+                <strong>Permission Control:</strong> You maintain full control over permissions at all times. 
+                You can revoke any permission through your device Settings → Apps → Call Monitor → Permissions.
+              </p>
+              <p>
+                <strong>No Third-Party Sharing:</strong> We never share, sell, or transfer your call data 
+                to third parties. All data processing happens locally on your device.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Explicit Consent Notice */}
+      <div className="mt-4 p-4 bg-yellow-100 rounded-lg border border-yellow-300">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">📋</span>
+          <div>
+            <p className="text-sm font-semibold text-yellow-900">Explicit Consent Required</p>
+            <p className="text-xs text-yellow-800">
+              By tapping "Grant Permissions", you consent to allowing this app to access your call logs 
+              and related features. The app will only function after you provide consent.
             </p>
           </div>
         </div>
@@ -222,7 +374,7 @@ const PermissionsManager: React.FC = () => {
       {Capacitor.isNativePlatform() && (
         <div className="mt-4 text-center">
           <p className="text-xs text-gray-500">
-            Tapping "Grant Permissions" will show system permission dialogs
+            Tapping "Grant Permissions" will show system permission dialogs. You must approve each permission for the app to work.
           </p>
         </div>
       )}

@@ -10,7 +10,16 @@ import AudioPlayer from './AudioPlayer';
 type ViewMode = 'list' | 'table';
 
 const Dashboard: React.FC = () => {
-  const { callLogs, isLoading, error, refreshCallLogs, lastUpdated, newCallsCount } = useCallLogs();
+  const { 
+    callLogs, 
+    isLoading, 
+    error, 
+    refreshCallLogs, 
+    lastUpdated, 
+    newCallsCount,
+    loadTime,
+    isSlowLoad 
+  } = useCallLogs();
   const { play } = useAudioPlayer();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
@@ -129,6 +138,11 @@ const Dashboard: React.FC = () => {
               {lastUpdated && (
                 <p className="text-sm text-gray-500 mt-1">
                   Last updated: {formatLastUpdated(lastUpdated)}
+                  {loadTime !== null && (
+                    <span className={`ml-2 ${loadTime > 3000 ? 'text-orange-500' : 'text-green-600'}`}>
+                      ({(loadTime / 1000).toFixed(1)}s)
+                    </span>
+                  )}
                 </p>
               )}
             </div>
@@ -149,6 +163,17 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Slow Load Warning */}
+        {isSlowLoad && isLoading && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-yellow-600 border-t-transparent"></div>
+            <div>
+              <p className="text-yellow-800 font-medium">Loading is taking longer than expected...</p>
+              <p className="text-yellow-700 text-sm">This may be due to a large call history or slow connection.</p>
+            </div>
+          </div>
+        )}
 
         <CallLogFilters />
 
@@ -185,9 +210,25 @@ const Dashboard: React.FC = () => {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center gap-2">
-            <span>⚠️</span>
-            <span>{error}</span>
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-start gap-3">
+              <span className="text-xl">⚠️</span>
+              <div className="flex-1">
+                <p className="text-yellow-800 font-medium">Notice</p>
+                <p className="text-yellow-700 text-sm">{error}</p>
+                {error.includes('sample data') && (
+                  <p className="text-yellow-600 text-xs mt-1">
+                    The data shown below is sample data for demonstration purposes.
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={refreshCallLogs}
+                className="text-yellow-700 hover:text-yellow-900 text-sm underline"
+              >
+                Try Again
+              </button>
+            </div>
           </div>
         )}
 

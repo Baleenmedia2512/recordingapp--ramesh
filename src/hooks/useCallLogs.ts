@@ -6,6 +6,11 @@ import { isMockMode } from '@/lib/supabase';
 import { Capacitor } from '@capacitor/core';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
 
+// Performance constants
+const LOAD_TIMEOUT_MS = 3000; // 3 second timeout for loading
+const AUTO_REFRESH_INTERVAL_MS = 30000; // 30 seconds
+const CALL_END_REFRESH_DELAY_MS = 2000; // Wait for call log to be written
+
 // Mock data for testing
 const mockCallLogs: CallLog[] = [
   {
@@ -77,15 +82,47 @@ export const useCallLogs = () => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [newCallsCount, setNewCallsCount] = useState(0);
+  const [loadTime, setLoadTime] = useState<number | null>(null);
+  const [isSlowLoad, setIsSlowLoad] = useState(false);
   const eventListenerRef = useRef<any>(null);
   const autoRefreshIntervalRef = useRef<any>(null);
   const previousCallLogsRef = useRef<CallLog[]>([]);
+  const loadStartTimeRef = useRef<number>(0);
+
+  // Helper to gracefully handle missing data
+  const sanitizeCallLog = (log: any): CallLog => {
+    return {
+      id: log.id || String(Math.random()),
+      user_id: log.user_id || 'local',
+      phone_number: log.phone_number || 'Unknown Number',
+      contact_name: log.contact_name || undefined,
+      call_type: log.call_type || 'unknown',
+      timestamp: log.timestamp || new Date().toISOString(),
+      duration: typeof log.duration === 'number' ? log.duration : 0,
+      device_id: log.device_id || 'current-device',
+      device_platform: log.device_platform || Capacitor.getPlatform(),
+      has_recording: Boolean(log.has_recording),
+      recording_url: log.recording_url || undefined,
+      is_synced: Boolean(log.is_synced),
+      created_at: log.created_at || log.timestamp || new Date().toISOString(),
+      updated_at: log.updated_at || log.timestamp || new Date().toISOString(),
+    };
+  };
 
   const fetchCallLogs = useCallback(async (customFilters?: DashboardFilters, silent = false) => {
     if (!silent) {
       setIsLoading(true);
+      loadStartTimeRef.current = performance.now();
+      setIsSlowLoad(false);
     }
     setError(null);
+    
+    // Set up timeout warning for slow loads
+    const slowLoadTimeout = setTimeout(() => {
+      if (!silent) {
+        setIsSlowLoad(true);
+      }
+    }, LOAD_TIMEOUT_MS);
     
     try {
       // Try to fetch from native plugin first on mobile devices
@@ -96,25 +133,27 @@ export const useCallLogs = () => {
           console.log('Native plugin result:', result);
           const nativeLogs = result.callLogs || [];
           
-          // Transform native logs to match our CallLog type
-          const transformedLogs = nativeLogs.map((log: any) => ({
-            id: log.id || String(Math.random()),
+          // Transform and sanitize native logs
+          const transformedLogs = nativeLogs.map((log: any) => sanitizeCallLog({
+            id: log.id,
             user_id: 'local',
-            phone_number: log.phone_number || 'Unknown',
-            contact_name: log.contact_name || undefined,
+            phone_number: log.phone_number,
+            contact_name: log.contact_name,
             call_type: log.call_type,
             timestamp: log.timestamp,
             duration: log.duration,
             device_id: 'current-device',
             device_platform: log.device_platform || Capacitor.getPlatform(),
-            has_recording: log.has_recording || false,
+            has_recording: log.has_recording,
             recording_url: log.recording_url,
-            is_synced: log.is_synced || false,
-            created_at: log.timestamp,
-            updated_at: log.timestamp,
-          })) as CallLog[];
+            is_synced: log.is_synced,
+          }));
           
           console.log('Transformed logs:', transformedLogs.length, 'entries');
+          
+          // Track load time
+          const elapsed = performance.now() - loadStartTimeRef.current;
+          setLoadTime(elapsed);
           
           // Check for new calls
           if (previousCallLogsRef.current.length > 0 && transformedLogs.length > previousCallLogsRef.current.length) {
@@ -129,19 +168,25 @@ export const useCallLogs = () => {
           setCallLogs(transformedLogs);
           setLastUpdated(new Date());
           
+          clearTimeout(slowLoadTimeout);
           if (!silent) {
             setIsLoading(false);
+            setIsSlowLoad(false);
           }
           return;
         } catch (nativeError: any) {
           console.error('Native call log fetch failed:', nativeError);
-          // On native platforms, if plugin fails, use mock data instead of API
-          setCallLogs(mockCallLogs);
+          // Gracefully handle - use mock data instead of failing completely
+          const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+          setCallLogs(sanitizedMocks);
           setLastUpdated(new Date());
           const errorMsg = nativeError?.message || 'Unknown error';
-          setError(`Could not access call logs: ${errorMsg}`);
+          setError(`Could not access call logs: ${errorMsg}. Showing sample data.`);
+          
+          clearTimeout(slowLoadTimeout);
           if (!silent) {
             setIsLoading(false);
+            setIsSlowLoad(false);
           }
           return;
         }
@@ -152,11 +197,16 @@ export const useCallLogs = () => {
       
       if (!token) {
         // Use mock data if not authenticated
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setCallLogs(mockCallLogs);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+        setCallLogs(sanitizedMocks);
         setLastUpdated(new Date());
+        setLoadTime(performance.now() - loadStartTimeRef.current);
+        
+        clearTimeout(slowLoadTimeout);
         if (!silent) {
           setIsLoading(false);
+          setIsSlowLoad(false);
         }
         return;
       }
@@ -172,10 +222,15 @@ export const useCallLogs = () => {
         if (!response.ok) {
           // If API route doesn't exist (static build), use mock data
           if (response.status === 404) {
-            setCallLogs(mockCallLogs);
+            const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+            setCallLogs(sanitizedMocks);
             setLastUpdated(new Date());
+            setLoadTime(performance.now() - loadStartTimeRef.current);
+            
+            clearTimeout(slowLoadTimeout);
             if (!silent) {
               setIsLoading(false);
+              setIsSlowLoad(false);
             }
             return;
           }
@@ -183,23 +238,31 @@ export const useCallLogs = () => {
         }
 
         const logs = await response.json();
-        setCallLogs(logs);
+        // Sanitize each log entry for graceful handling of missing data
+        const sanitizedLogs = (logs || []).map(sanitizeCallLog);
+        setCallLogs(sanitizedLogs);
         setLastUpdated(new Date());
+        setLoadTime(performance.now() - loadStartTimeRef.current);
       } catch (fetchError: any) {
         console.warn('API fetch failed, using mock data:', fetchError);
-        // Fallback to mock data on any fetch error
-        setCallLogs(mockCallLogs);
+        // Graceful fallback to mock data on any fetch error
+        const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+        setCallLogs(sanitizedMocks);
         setLastUpdated(new Date());
+        setError('Could not connect to server. Showing sample data.');
       }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch call logs');
       console.error('Error fetching call logs:', err);
-      // Fallback to mock data on error
-      setCallLogs(mockCallLogs);
+      // Graceful fallback to mock data on error
+      const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+      setCallLogs(sanitizedMocks);
       setLastUpdated(new Date());
     } finally {
+      clearTimeout(slowLoadTimeout);
       if (!silent) {
         setIsLoading(false);
+        setIsSlowLoad(false);
       }
     }
   }, [filters, setCallLogs, setIsLoading]);
@@ -258,7 +321,7 @@ export const useCallLogs = () => {
     // Poll every 30 seconds for new call logs
     autoRefreshIntervalRef.current = setInterval(() => {
       fetchCallLogs(filters, true);
-    }, 30000);
+    }, AUTO_REFRESH_INTERVAL_MS);
 
     return () => {
       if (autoRefreshIntervalRef.current) {
@@ -279,5 +342,7 @@ export const useCallLogs = () => {
     fetchCallLogs,
     lastUpdated,
     newCallsCount,
+    loadTime,
+    isSlowLoad,
   };
 };
