@@ -132,7 +132,15 @@ export const useAudioPlayer = () => {
           throw new Error('No recording URL provided');
         }
         
-        audioRef.current.src = audioUrl;
+        // Convert file:// URLs to Capacitor-compatible URLs
+        let playableUrl = audioUrl;
+        if (Capacitor.isNativePlatform() && audioUrl.startsWith('file://')) {
+          // Use Capacitor's convertFileSrc to make file accessible to WebView
+          playableUrl = Capacitor.convertFileSrc(audioUrl);
+          console.log('Converted URL:', playableUrl);
+        }
+        
+        audioRef.current.src = playableUrl;
         setAudioPlayer({ callLogId, currentTime: 0, duration: 0 });
         
         // Load the audio
