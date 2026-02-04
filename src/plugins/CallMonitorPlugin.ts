@@ -1,5 +1,12 @@
 import { registerPlugin } from '@capacitor/core';
 
+export interface RecordingInfo {
+  filePath: string;
+  fileName: string;
+  phoneNumber: string;
+  timestamp: string;
+}
+
 export interface CallMonitorPlugin {
   // Permission methods
   checkAllPermissions(): Promise<{
@@ -20,6 +27,9 @@ export interface CallMonitorPlugin {
     offset?: number;
     fromDate?: string;
   }): Promise<{ callLogs: any[] }>;
+
+  // Recording detection methods
+  getRecordings(): Promise<{ recordings: RecordingInfo[]; count: number }>;
 
   // Call monitoring methods (auto-refresh)
   startListeningForCalls(): Promise<{ success: boolean; message: string }>;

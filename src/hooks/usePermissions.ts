@@ -47,16 +47,16 @@ export const usePermissions = () => {
             description: 'Optional: Shows contact names for phone numbers',
           },
           {
+            name: 'Storage',
+            granted: result.storage || false,
+            required: false,
+            description: 'Optional: Required to detect stored call recordings',
+          },
+          {
             name: 'Record Audio',
             granted: result.recordAudio,
             required: false,
             description: 'Optional: Required to record call audio',
-          },
-          {
-            name: 'Storage',
-            granted: result.storage,
-            required: false,
-            description: 'Optional: Required to store call recordings',
           },
         ]);
       } else if (platform === 'ios') {

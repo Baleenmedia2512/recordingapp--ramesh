@@ -1,5 +1,5 @@
 import { WebPlugin } from '@capacitor/core';
-import type { CallMonitorPlugin } from './CallMonitorPlugin';
+import type { CallMonitorPlugin, RecordingInfo } from './CallMonitorPlugin';
 
 export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
   async checkAllPermissions(): Promise<any> {
@@ -27,20 +27,49 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
         {
           id: '1',
           phone_number: '+1234567890',
+          contact_name: 'John Doe',
           call_type: 'incoming',
           timestamp: new Date().toISOString(),
           duration: 125,
           has_recording: true,
+          recording_url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
         },
         {
           id: '2',
           phone_number: '+0987654321',
+          contact_name: 'Jane Smith',
           call_type: 'outgoing',
           timestamp: new Date(Date.now() - 3600000).toISOString(),
           duration: 245,
           has_recording: false,
+          recording_url: '',
+        },
+        {
+          id: '3',
+          phone_number: '+5551234567',
+          contact_name: null,
+          call_type: 'missed',
+          timestamp: new Date(Date.now() - 7200000).toISOString(),
+          duration: 0,
+          has_recording: false,
+          recording_url: '',
         },
       ],
+    };
+  }
+
+  async getRecordings(): Promise<{ recordings: RecordingInfo[]; count: number }> {
+    console.log('Web platform: Returning mock recordings');
+    return {
+      recordings: [
+        {
+          filePath: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+          fileName: 'Recording_+1234567890_2024-01-15_10-30-45.mp3',
+          phoneNumber: '+1234567890',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      count: 1,
     };
   }
 
