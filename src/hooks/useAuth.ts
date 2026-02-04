@@ -1,77 +1,78 @@
 import { useEffect } from 'react';
 import { useStore } from '@/store';
-import { authApi } from '@/lib/auth';
-import { supabase, isMockMode } from '@/lib/supabase';
 
 export const useAuth = () => {
   const { user, setUser } = useStore();
 
   useEffect(() => {
-    // Mock mode: Auto-login with test user
-    if (isMockMode) {
-      const mockUser = {
-        id: 'mock-user-id',
-        email: 'test@callmonitor.com',
-        user_metadata: { full_name: 'Test User' },
-      } as any;
-      setUser(mockUser);
-      return;
-    }
-
-    // Get initial session
-    authApi.getSession().then((session) => {
-      setUser(session?.user ?? null);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
+    // Check for stored token
+    const token = localStorage.getItem('auth_token');
+    const storedUser = localStorage.getItem('auth_user');
+    
+    if (token && storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_user');
       }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    }
   }, [setUser]);
 
   const signIn = async (email: string, password: string) => {
-    if (isMockMode) {
-      // Mock sign in
-      const mockUser = {
-        id: 'mock-user-id',
-        email: email,
-        user_metadata: { full_name: 'Test User' },
-      } as any;
-      setUser(mockUser);
-      return { user: mockUser, session: null };
+    const response = await fetch('/api/auth/signin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Sign in failed');
     }
-    const data = await authApi.signIn(email, password);
-    return data;
+
+    const { user, token } = await response.json();
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('auth_user', JSON.stringify(user));
+    setUser(user);
+    return { user };
   };
 
   const signUp = async (email: string, password: string, fullName?: string) => {
-    if (isMockMode) {
-      // Mock sign up
-      const mockUser = {
-        id: 'mock-user-id',
-        email: email,
-        user_metadata: { full_name: fullName || 'Test User' },
-      } as any;
-      setUser(mockUser);
-      return { user: mockUser, session: null };
+    const response = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, fullName }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Sign up failed');
     }
-    const data = await authApi.signUp(email, password, fullName);
-    return data;
+
+    const { user, token } = await response.json();
+    localStorage.setItem('auth_token', token);
+    localStorage.setItem('auth_user', JSON.stringify(user));
+    setUser(user);
+    return { user };
   };
 
   const signOut = async () => {
-    if (isMockMode) {
-      setUser(null);
-      return;
-    }
-    await authApi.signOut();
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
     setUser(null);
+  };
+
+  const guestLogin = () => {
+    const guestUser = {
+      id: 'guest-' + Date.now(),
+      email: 'guest@temporary.local',
+      full_name: 'Guest User',
+      isGuest: true,
+    };
+    localStorage.setItem('auth_token', 'guest-token');
+    localStorage.setItem('auth_user', JSON.stringify(guestUser));
+    setUser(guestUser);
   };
 
   return {
@@ -79,6 +80,7 @@ export const useAuth = () => {
     signIn,
     signUp,
     signOut,
+    guestLogin,
     isAuthenticated: !!user,
   };
 };

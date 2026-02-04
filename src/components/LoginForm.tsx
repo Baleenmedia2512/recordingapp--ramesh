@@ -13,7 +13,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, guestLogin } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +32,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGuestLogin = () => {
+    guestLogin();
+    onSuccess?.();
   };
 
   return (
@@ -106,6 +111,15 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
             {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Sign Up'}
           </button>
         </form>
+
+        <div className="mt-4">
+          <button
+            onClick={handleGuestLogin}
+            className="w-full bg-gray-500 text-white py-3 rounded-lg hover:bg-gray-600 transition-colors font-medium"
+          >
+            🚀 Continue as Guest (No Login Required)
+          </button>
+        </div>
 
         <div className="mt-6 text-center">
           <button

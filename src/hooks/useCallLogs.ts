@@ -79,17 +79,38 @@ export const useCallLogs = () => {
     setError(null);
     
     try {
-      if (isMockMode) {
-        // Simulate API delay
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        // Use mock data if not authenticated
         await new Promise(resolve => setTimeout(resolve, 500));
         setCallLogs(mockCallLogs);
-      } else {
-        const logs = await callLogApi.fetchCallLogs(customFilters || filters);
-        setCallLogs(logs);
+        return;
       }
+
+      const response = await fetch('/api/call-logs', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        // If API route doesn't exist (static build), use mock data
+        if (response.status === 404) {
+          setCallLogs(mockCallLogs);
+          return;
+        }
+        throw new Error('Failed to fetch call logs');
+      }
+
+      const logs = await response.json();
+      setCallLogs(logs);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch call logs');
       console.error('Error fetching call logs:', err);
+      // Fallback to mock data on error
+      setCallLogs(mockCallLogs);
     } finally {
       setIsLoading(false);
     }

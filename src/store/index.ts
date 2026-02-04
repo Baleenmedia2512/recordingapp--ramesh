@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { CallLog, DashboardFilters, AudioPlayerState, SyncStatus } from '@/types';
-import { User } from '@supabase/supabase-js';
+import { CallLog, DashboardFilters, AudioPlayerState, SyncStatus, User } from '@/types';
 
 interface AppStore {
   // Auth state
