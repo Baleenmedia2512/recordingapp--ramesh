@@ -98,6 +98,17 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
     return { success: false };
   }
 
+  async uploadRecordingToDrive(options: {
+    filePath: string;
+    fileName: string;
+  }): Promise<{ success: boolean; fileUrl?: string; error?: string }> {
+    console.log('Web platform: Google Drive upload not supported directly', options);
+    return { 
+      success: false, 
+      error: 'Use the API endpoint /api/recordings/upload for web uploads' 
+    };
+  }
+
   async findRecordingByCallTime(options: {
     callStartTime: number;
     callEndTime?: number;

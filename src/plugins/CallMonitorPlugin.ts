@@ -76,6 +76,12 @@ export interface CallMonitorPlugin {
   startRecording(): Promise<{ success: boolean }>;
   stopRecording(): Promise<{ success: boolean; filePath?: string }>;
   
+  // Google Drive upload method
+  uploadRecordingToDrive(options: {
+    filePath: string;
+    fileName: string;
+  }): Promise<{ success: boolean; fileUrl?: string; error?: string }>;
+  
   // Sync methods
   syncCallLogs(options: { logs: any[] }): Promise<{ success: boolean }>;
   
