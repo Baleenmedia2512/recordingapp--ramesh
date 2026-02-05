@@ -5,6 +5,15 @@ export interface RecordingInfo {
   fileName: string;
   phoneNumber: string;
   timestamp: string;
+  duration?: number;
+}
+
+export interface RecordingScanInfo {
+  manufacturer: string;
+  model: string;
+  androidVersion: number;
+  recordingsFound: number;
+  existingRecordingPaths: string[];
 }
 
 export interface CallMonitorPlugin {
@@ -17,6 +26,7 @@ export interface CallMonitorPlugin {
     storage: boolean;
     microphone: boolean;
     network: boolean;
+    mediaAudio?: boolean; // Android 13+ specific
   }>;
   
   requestAllPermissionsPlugin(): Promise<{ granted: boolean }>;
@@ -34,6 +44,29 @@ export interface CallMonitorPlugin {
   
   // Clear recordings cache (call when app resumes to get fresh data)
   clearRecordingsCache(): Promise<{ success: boolean }>;
+  
+  /**
+   * Find recording by call timestamp using MediaStore API
+   * This works on ALL Android devices regardless of where recordings are stored
+   * @param options.callStartTime - Call start time in milliseconds
+   * @param options.callEndTime - Call end time in milliseconds (optional, defaults to now)
+   * @param options.phoneNumber - Phone number to match (optional, improves accuracy)
+   */
+  findRecordingByCallTime(options: {
+    callStartTime: number;
+    callEndTime?: number;
+    phoneNumber?: string;
+  }): Promise<{
+    recordings: RecordingInfo[];
+    count: number;
+    bestMatch: string | null;
+  }>;
+  
+  /**
+   * Get detailed scan info for debugging recording detection
+   * Returns device info and what recording paths exist
+   */
+  getRecordingScanInfo(): Promise<RecordingScanInfo>;
 
   // Call monitoring methods (auto-refresh)
   startListeningForCalls(): Promise<{ success: boolean; message: string }>;

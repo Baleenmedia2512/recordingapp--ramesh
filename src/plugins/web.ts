@@ -1,5 +1,5 @@
 import { WebPlugin } from '@capacitor/core';
-import type { CallMonitorPlugin, RecordingInfo } from './CallMonitorPlugin';
+import type { CallMonitorPlugin, RecordingInfo, RecordingScanInfo } from './CallMonitorPlugin';
 
 export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
   async checkAllPermissions(): Promise<any> {
@@ -96,6 +96,42 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
   async stopRecording(): Promise<{ success: boolean; filePath?: string }> {
     console.log('Web platform: Recording not supported');
     return { success: false };
+  }
+
+  async findRecordingByCallTime(options: {
+    callStartTime: number;
+    callEndTime?: number;
+    phoneNumber?: string;
+  }): Promise<{
+    recordings: RecordingInfo[];
+    count: number;
+    bestMatch: string | null;
+  }> {
+    console.log('Web platform: findRecordingByCallTime not supported', options);
+    return {
+      recordings: [
+        {
+          filePath: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+          fileName: 'Recording_mock.mp3',
+          phoneNumber: options.phoneNumber || '+1234567890',
+          timestamp: new Date(options.callStartTime).toISOString(),
+          duration: 120000,
+        },
+      ],
+      count: 1,
+      bestMatch: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    };
+  }
+
+  async getRecordingScanInfo(): Promise<RecordingScanInfo> {
+    console.log('Web platform: getRecordingScanInfo not supported');
+    return {
+      manufacturer: 'Web Browser',
+      model: navigator.userAgent,
+      androidVersion: 0,
+      recordingsFound: 0,
+      existingRecordingPaths: [],
+    };
   }
 
   async syncCallLogs(options: any): Promise<{ success: boolean }> {
