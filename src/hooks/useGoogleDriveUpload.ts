@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
+import { uploadAndSyncToLMS, filePathToBlob } from '@/services/supabaseUpload';
 
 interface UploadStatus {
   isUploading: boolean;
   progress: number;
   error: string | null;
   uploadedUrl: string | null;
+  sentToLMS?: boolean;
 }
 
 export const useGoogleDriveUpload = () => {
@@ -14,36 +16,43 @@ export const useGoogleDriveUpload = () => {
     progress: 0,
     error: null,
     uploadedUrl: null,
+    sentToLMS: false,
   });
 
   /**
-   * Upload a recording to Google Drive
+   * Upload a recording to Supabase Storage and optionally send to LMS
    */
-  const uploadRecording = async (filePath: string, fileName: string) => {
+  const uploadRecording = async (filePath: string, fileName: string, duration?: number) => {
     setUploadStatus({
       isUploading: true,
       progress: 0,
       error: null,
       uploadedUrl: null,
+      sentToLMS: false,
     });
 
     try {
-      // Use the native plugin method
-      const result = await CallMonitor.uploadRecordingToDrive({
-        filePath,
-        fileName,
-      });
+      // Convert file path to blob
+      const blob = await filePathToBlob(filePath);
+      
+      if (!blob) {
+        throw new Error('Failed to read file');
+      }
 
-      if (result.success && result.fileUrl) {
+      // Upload to Supabase and sync to LMS
+      const result = await uploadAndSyncToLMS(blob, fileName, duration || 0);
+
+      if (result.success && result.url) {
         setUploadStatus({
           isUploading: false,
           progress: 100,
           error: null,
-          uploadedUrl: result.fileUrl,
+          uploadedUrl: result.url,
+          sentToLMS: result.sentToLMS,
         });
-        return result.fileUrl;
+        return { url: result.url, sentToLMS: result.sentToLMS };
       } else {
-        throw new Error(result.error || 'Upload failed');
+        throw new Error('Upload failed');
       }
     } catch (error: any) {
       setUploadStatus({
@@ -51,6 +60,7 @@ export const useGoogleDriveUpload = () => {
         progress: 0,
         error: error.message || 'Upload failed',
         uploadedUrl: null,
+        sentToLMS: false,
       });
       throw error;
     }

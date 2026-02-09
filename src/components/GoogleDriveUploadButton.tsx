@@ -18,9 +18,9 @@ export const GoogleDriveUploadButton: React.FC<GoogleDriveUploadButtonProps> = (
 
   const handleUpload = async () => {
     try {
-      const url = await uploadRecording(recording.filePath, recording.fileName);
-      if (url && onUploadComplete) {
-        onUploadComplete(url);
+      const result = await uploadRecording(recording.filePath, recording.fileName);
+      if (result && result.url && onUploadComplete) {
+        onUploadComplete(result.url);
       }
     } catch (error) {
       console.error('Upload failed:', error);

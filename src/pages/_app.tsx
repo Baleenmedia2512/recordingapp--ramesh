@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { App as CapacitorApp } from '@capacitor/app';
+import { testLMSConnection } from '@/services/lmsApi';
 
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
@@ -22,6 +23,17 @@ export default function App({ Component, pageProps }: AppProps) {
         }
       });
     }
+
+    // Test LMS connection on app startup
+    testLMSConnection().then((connected) => {
+      if (connected) {
+        console.log('✅ LMS integration ready');
+      } else {
+        console.log('⚠️ LMS not reachable - app will work in standalone mode');
+      }
+    }).catch((error) => {
+      console.error('❌ Error testing LMS connection:', error);
+    });
   }, []);
 
   return <Component {...pageProps} />;

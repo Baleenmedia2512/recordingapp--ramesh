@@ -15,6 +15,8 @@ export interface CallLog {
   has_recording: boolean;
   recording_path?: string;
   recording_url?: string;
+  recording_file_path?: string; // Native plugin field
+  recording_file_name?: string; // Native plugin field
   is_synced: boolean;
   created_at: string;
   updated_at: string;

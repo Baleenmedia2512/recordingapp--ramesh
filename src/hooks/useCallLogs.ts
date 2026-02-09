@@ -5,6 +5,7 @@ import { DashboardFilters, CallLog } from '@/types';
 import { isMockMode } from '@/lib/supabase';
 import { Capacitor } from '@capacitor/core';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
+import { uploadAndSyncToLMS } from '@/services/supabaseUpload';
 
 // Performance constants
 const LOAD_TIMEOUT_MS = 3000; // 3 second timeout for loading
@@ -87,6 +88,7 @@ export const useCallLogs = () => {
   const eventListenerRef = useRef<any>(null);
   const autoRefreshIntervalRef = useRef<any>(null);
   const previousCallLogsRef = useRef<CallLog[]>([]);
+  const callLogsRef = useRef<CallLog[]>([]); // Keep track of current call logs for upload retry
   const loadStartTimeRef = useRef<number>(0);
 
   // Helper to gracefully handle missing data
@@ -103,6 +105,8 @@ export const useCallLogs = () => {
       device_platform: log.device_platform || Capacitor.getPlatform(),
       has_recording: Boolean(log.has_recording),
       recording_url: log.recording_url || undefined,
+      recording_file_path: log.recording_file_path || undefined,
+      recording_file_name: log.recording_file_name || undefined,
       is_synced: Boolean(log.is_synced),
       created_at: log.created_at || log.timestamp || new Date().toISOString(),
       updated_at: log.updated_at || log.timestamp || new Date().toISOString(),
@@ -156,6 +160,8 @@ export const useCallLogs = () => {
             device_platform: log.device_platform || Capacitor.getPlatform(),
             has_recording: log.has_recording,
             recording_url: log.recording_url,
+            recording_file_path: log.recording_file_path,
+            recording_file_name: log.recording_file_name,
             is_synced: log.is_synced,
           }));
           
@@ -175,6 +181,7 @@ export const useCallLogs = () => {
           }
           
           previousCallLogsRef.current = transformedLogs;
+          callLogsRef.current = transformedLogs;
           setCallLogs(transformedLogs);
           setLastUpdated(new Date());
           
@@ -188,6 +195,7 @@ export const useCallLogs = () => {
           console.error('Native call log fetch failed:', nativeError);
           // Gracefully handle - use mock data instead of failing completely
           const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+          callLogsRef.current = sanitizedMocks;
           setCallLogs(sanitizedMocks);
           setLastUpdated(new Date());
           const errorMsg = nativeError?.message || 'Unknown error';
@@ -209,6 +217,7 @@ export const useCallLogs = () => {
         // Use mock data if not authenticated
         await new Promise(resolve => setTimeout(resolve, 300));
         const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+        callLogsRef.current = sanitizedMocks;
         setCallLogs(sanitizedMocks);
         setLastUpdated(new Date());
         setLoadTime(performance.now() - loadStartTimeRef.current);
@@ -233,6 +242,7 @@ export const useCallLogs = () => {
           // If API route doesn't exist (static build), use mock data
           if (response.status === 404) {
             const sanitizedMocks = mockCallLogs.map(sanitizeCallLog);
+            callLogsRef.current = sanitizedMocks;
             setCallLogs(sanitizedMocks);
             setLastUpdated(new Date());
             setLoadTime(performance.now() - loadStartTimeRef.current);
@@ -312,13 +322,96 @@ export const useCallLogs = () => {
         });
         
         // Listen for phone state changes
-        const phoneStateListener = await CallMonitor.addListener('phoneStateChanged', (data) => {
+        const phoneStateListener = await CallMonitor.addListener('phoneStateChanged', async (data) => {
           console.log('Phone state changed:', data);
           if (data.type === 'call_ended') {
-            // Wait a moment for the call log and recording to be written, then force refresh
-            setTimeout(() => {
+            // Wait a moment for the call log and recording to be written
+            setTimeout(async () => {
               console.log('Call ended, force refreshing to get new recording...');
-              fetchCallLogs(filters, true, true);
+              // Refresh call logs first to get the new recording
+              await fetchCallLogs(filters, true, true);
+              
+              // Retry function to find and upload recording using findRecordingByCallTime
+              const tryUploadWithRetry = async (attempt: number = 1, maxAttempts: number = 10): Promise<void> => {
+                try {
+                  console.log(`📤 Attempting to upload recording (attempt ${attempt}/${maxAttempts})...`);
+                  
+                  // Get latest call from state (already refreshed)
+                  const latestLog = callLogsRef.current?.[0];
+                  
+                  if (!latestLog) {
+                    console.log('⚠️ No call logs found');
+                    return;
+                  }
+                  
+                  console.log(`📋 Latest call: ${latestLog.phone_number?.substring(0, 4)}***, duration: ${latestLog.duration}s`);
+                  
+                  // Use findRecordingByCallTime API to locate the recording file
+                  const callTime = new Date(latestLog.timestamp).getTime();
+                  const callEndTime = callTime + ((latestLog.duration || 0) * 1000);
+                  
+                  console.log(`🔍 Searching for recording (call time: ${new Date(callTime).toLocaleTimeString()})`);
+                  
+                  const recordingResult = await CallMonitor.findRecordingByCallTime({
+                    callStartTime: callTime,
+                    callEndTime: callEndTime,
+                    phoneNumber: latestLog.phone_number
+                  });
+                  
+                  console.log(`🔍 Found ${recordingResult.count} recordings, bestMatch: ${recordingResult.bestMatch ? 'YES' : 'NO'}`);
+                  
+                  if (recordingResult.bestMatch && recordingResult.recordings.length > 0) {
+                    const recording = recordingResult.recordings[0];
+                    console.log(`📤 Found recording! File: ${recording.fileName}`);
+                    console.log(`📂 File path: ${recording.filePath}`);
+                    
+                    // Read file as blob
+                    console.log('🔄 Converting file path to URI...');
+                    const fileUri = Capacitor.convertFileSrc(recording.filePath);
+                    console.log(`📍 File URI: ${fileUri}`);
+                    
+                    console.log('📥 Fetching file as blob...');
+                    const response = await fetch(fileUri);
+                    console.log(`📊 Fetch response status: ${response.status} ${response.statusText}`);
+                    
+                    console.log('🔄 Converting to blob...');
+                    const blob = await response.blob();
+                    console.log(`📦 Blob created: ${blob.size} bytes, type: ${blob.type}`);
+                    
+                    // Upload to Supabase and sync to LMS
+                    console.log('☁️ Starting Supabase upload...');
+                    const uploadResult = await uploadAndSyncToLMS(
+                      blob,
+                      recording.fileName,
+                      latestLog.duration || 0
+                    );
+                    
+                    if (uploadResult.url) {
+                      console.log('✅ Auto-upload successful!', uploadResult.url);
+                      if (uploadResult.sentToLMS) {
+                        console.log('✅ Recording sent to LMS!');
+                      } else {
+                        console.log('⚠️ Uploaded to Supabase but not synced with LMS');
+                      }
+                    }
+                  } else if (attempt < maxAttempts) {
+                    // Recording not indexed yet, retry after delay
+                    console.log(`⏳ Recording not indexed yet, retrying in 3s (attempt ${attempt}/${maxAttempts})...`);
+                    setTimeout(() => tryUploadWithRetry(attempt + 1, maxAttempts), 3000);
+                  } else {
+                    console.log(`❌ Recording not found after ${maxAttempts} attempts`);
+                  }
+                } catch (uploadError) {
+                  console.error(`❌ Auto-upload error (attempt ${attempt}):`, uploadError);
+                  if (attempt < maxAttempts) {
+                    console.log(`⏳ Retrying after error in 3s...`);
+                    setTimeout(() => tryUploadWithRetry(attempt + 1, maxAttempts), 3000);
+                  }
+                }
+              };
+              
+              // Start upload with retry
+              tryUploadWithRetry();
             }, CALL_END_REFRESH_DELAY_MS);
           }
         });
