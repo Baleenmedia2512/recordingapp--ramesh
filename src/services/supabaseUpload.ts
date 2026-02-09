@@ -6,12 +6,14 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { sendRecordingToLMS, getLMSCallInfo, clearLMSCallInfo } from './googleDriveService';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/env';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Debug: Log environment variables
+console.log('🔍 [supabaseUpload.ts] Supabase URL:', SUPABASE_URL || 'MISSING');
+console.log('🔍 [supabaseUpload.ts] Supabase Key:', SUPABASE_ANON_KEY ? `${SUPABASE_ANON_KEY.substring(0, 20)}...` : 'MISSING');
 
 // Initialize Supabase client
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export interface UploadResult {
   success: boolean;
