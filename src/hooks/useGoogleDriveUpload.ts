@@ -39,8 +39,8 @@ export const useGoogleDriveUpload = () => {
         throw new Error('Failed to read file');
       }
 
-      // Upload to Supabase and sync to LMS
-      const result = await uploadAndSyncToLMS(blob, fileName, duration || 0);
+      // Upload to Supabase and sync to LMS, passing original file path for native optimization
+      const result = await uploadAndSyncToLMS(blob, fileName, duration || 0, filePath);
 
       if (result.success && result.url) {
         setUploadStatus({

@@ -25,6 +25,19 @@ export const supabase = createClient(finalUrl, finalKey, {
     persistSession: true,
     autoRefreshToken: true,
   },
+  global: {
+    headers: {
+      'X-Client-Info': 'call-monitor-app',
+    },
+  },
+  db: {
+    schema: 'public',
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 2,
+    },
+  },
 });
 
 // Helper function to handle Supabase errors

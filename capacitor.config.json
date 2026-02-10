@@ -4,7 +4,13 @@
   "webDir": "out",
   "server": {
     "androidScheme": "https",
-    "allowNavigation": ["*"]
+    "allowNavigation": [
+      "*",
+      "https://wkwrrdcjknvupwsfdjtd.supabase.co",
+      "https://*.supabase.co"
+    ],
+    "cleartext": true,
+    "hostname": "localhost"
   },
   "plugins": {
     "SplashScreen": {

@@ -82,6 +82,24 @@ export interface CallMonitorPlugin {
     fileName: string;
   }): Promise<{ success: boolean; fileUrl?: string; error?: string }>;
   
+  /**
+   * Native upload to Supabase Storage using OkHttp with DNS over HTTPS
+   * This bypasses Android's broken DNS resolver issues
+   */
+  uploadToSupabase(options: {
+    filePath: string;
+    fileName: string;
+    bucketName?: string;
+    supabaseUrl: string;
+    supabaseKey: string;
+    storagePath?: string;
+  }): Promise<{
+    success: boolean;
+    path?: string;
+    publicUrl?: string;
+    fileSize?: number;
+  }>;
+  
   // Sync methods
   syncCallLogs(options: { logs: any[] }): Promise<{ success: boolean }>;
   

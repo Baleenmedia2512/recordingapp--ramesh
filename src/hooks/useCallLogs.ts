@@ -365,25 +365,49 @@ export const useCallLogs = () => {
                     console.log(`📤 Found recording! File: ${recording.fileName}`);
                     console.log(`📂 File path: ${recording.filePath}`);
                     
-                    // Read file as blob
+                    // Read file as blob with timeout
                     console.log('🔄 Converting file path to URI...');
                     const fileUri = Capacitor.convertFileSrc(recording.filePath);
                     console.log(`📍 File URI: ${fileUri}`);
                     
                     console.log('📥 Fetching file as blob...');
-                    const response = await fetch(fileUri);
-                    console.log(`📊 Fetch response status: ${response.status} ${response.statusText}`);
+                    
+                    // Create fetch with 15 second timeout
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => {
+                      console.error('⏱️ Blob fetch timeout after 15s');
+                      controller.abort();
+                    }, 15000);
+                    
+                    let response;
+                    try {
+                      response = await fetch(fileUri, { signal: controller.signal });
+                      clearTimeout(timeoutId);
+                      console.log(`📊 Fetch response status: ${response.status} ${response.statusText}`);
+                    } catch (fetchError: any) {
+                      clearTimeout(timeoutId);
+                      throw new Error(`Failed to fetch file: ${fetchError.message}`);
+                    }
+                    
+                    if (!response.ok) {
+                      throw new Error(`Fetch failed with status ${response.status}`);
+                    }
                     
                     console.log('🔄 Converting to blob...');
                     const blob = await response.blob();
                     console.log(`📦 Blob created: ${blob.size} bytes, type: ${blob.type}`);
                     
-                    // Upload to Supabase and sync to LMS
+                    if (blob.size === 0) {
+                      throw new Error('Blob is empty (0 bytes)');
+                    }
+                    
+                    // Upload to Supabase and sync to LMS, passing original file path for native optimization
                     console.log('☁️ Starting Supabase upload...');
                     const uploadResult = await uploadAndSyncToLMS(
                       blob,
                       recording.fileName,
-                      latestLog.duration || 0
+                      latestLog.duration || 0,
+                      recording.filePath  // Pass original file path for native upload with DNS over HTTPS
                     );
                     
                     if (uploadResult.url) {

@@ -109,6 +109,25 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
     };
   }
 
+  async uploadToSupabase(options: {
+    filePath: string;
+    fileName: string;
+    bucketName?: string;
+    supabaseUrl: string;
+    supabaseKey: string;
+    storagePath?: string;
+  }): Promise<{
+    success: boolean;
+    path?: string;
+    publicUrl?: string;
+    fileSize?: number;
+  }> {
+    console.log('Web platform: uploadToSupabase not supported, use web SDK instead', options);
+    return {
+      success: false,
+    };
+  }
+
   async findRecordingByCallTime(options: {
     callStartTime: number;
     callEndTime?: number;

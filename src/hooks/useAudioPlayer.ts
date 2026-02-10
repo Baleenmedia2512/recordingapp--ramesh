@@ -12,6 +12,7 @@ export const useAudioPlayer = () => {
   const [error, setError] = useState<string | null>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState>('idle');
   const [isLoading, setIsLoading] = useState(false);
+  const cleanupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -20,6 +21,11 @@ export const useAudioPlayer = () => {
       // Set audio attributes for better mobile compatibility
       audioRef.current.preload = 'metadata';
       audioRef.current.crossOrigin = 'anonymous';
+      
+      // Enable better mobile support
+      if (Capacitor.isNativePlatform()) {
+        console.log('📱 Native platform detected, optimizing audio player...');
+      }
 
       audioRef.current.addEventListener('loadstart', () => {
         setIsLoading(true);
@@ -62,33 +68,40 @@ export const useAudioPlayer = () => {
       });
 
       audioRef.current.addEventListener('error', (e) => {
-        console.error('Audio playback error:', e);
+        console.error('❌ Audio playback error:', e);
         setIsLoading(false);
         setPlaybackState('error');
         
         // Provide specific error messages
         const audio = audioRef.current;
+        let errorMsg = 'Failed to load or play audio file';
+        
         if (audio && audio.error) {
+          console.error('🚨 MediaError code:', audio.error.code, 'message:', audio.error.message);
+          
           switch (audio.error.code) {
             case MediaError.MEDIA_ERR_ABORTED:
-              setError('Playback was aborted');
+              errorMsg = 'Playback was aborted';
               break;
             case MediaError.MEDIA_ERR_NETWORK:
-              setError('Network error - could not load audio file');
+              errorMsg = 'Network error - could not load audio file';
               break;
             case MediaError.MEDIA_ERR_DECODE:
-              setError('Audio file is corrupted or format not supported');
+              errorMsg = 'Audio file is corrupted or format not supported';
               break;
             case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-              setError('Audio file not found or format not supported');
+              errorMsg = 'Audio file not found or format not supported';
               break;
             default:
-              setError('Failed to load or play audio file');
+              errorMsg = 'Failed to load or play audio file';
           }
         } else {
-          setError('Failed to load or play audio file');
+          // Generic error - might be due to file access issues
+          console.error('⚠️ Generic audio error - possibly file access issue');
+          errorMsg = 'Cannot access audio file. Check file permissions.';
         }
         
+        setError(errorMsg);
         setAudioPlayer({ isPlaying: false });
       });
 
@@ -107,10 +120,31 @@ export const useAudioPlayer = () => {
     }
 
     return () => {
+      // Cleanup function with proper resource management
+      console.log('🧹 Cleaning up audio player resources...');
+      
+      if (cleanupTimeoutRef.current) {
+        clearTimeout(cleanupTimeoutRef.current);
+        cleanupTimeoutRef.current = null;
+      }
+      
       if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.src = '';
-        audioRef.current = null;
+        try {
+          // Pause and clear source
+          audioRef.current.pause();
+          
+          // Remove all event listeners by cloning and replacing
+          const oldAudio = audioRef.current;
+          audioRef.current.src = '';
+          audioRef.current.load(); // This triggers cleanup of resources
+          
+          // Set to null after cleanup
+          audioRef.current = null;
+          
+          console.log('✅ Audio resources cleaned up successfully');
+        } catch (cleanupError) {
+          console.warn('⚠️ Error during audio cleanup:', cleanupError);
+        }
       }
     };
   }, []);
@@ -132,26 +166,46 @@ export const useAudioPlayer = () => {
           throw new Error('No recording URL provided');
         }
         
+        console.log('🎵 Loading new audio:', audioUrl);
+        
         // Convert file:// URLs to Capacitor-compatible URLs
         let playableUrl = audioUrl;
-        if (Capacitor.isNativePlatform() && audioUrl.startsWith('file://')) {
-          // Use Capacitor's convertFileSrc to make file accessible to WebView
-          playableUrl = Capacitor.convertFileSrc(audioUrl);
-          console.log('Converted URL:', playableUrl);
+        if (Capacitor.isNativePlatform()) {
+          if (audioUrl.startsWith('file://')) {
+            // Use Capacitor's convertFileSrc to make file accessible to WebView
+            playableUrl = Capacitor.convertFileSrc(audioUrl);
+            console.log('🔄 Converted URL for native platform:', playableUrl);
+          } else if (audioUrl.startsWith('https://localhost/_capacitor_file_')) {
+            // Already converted, use as-is
+            console.log('✅ URL already in Capacitor format');
+          } else {
+            console.log('🌐 Using web URL as-is:', audioUrl.substring(0, 50) + '...');
+          }
         }
         
+        // Clean up previous audio before loading new one
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        
+        // Small delay to ensure cleanup
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Set new source
         audioRef.current.src = playableUrl;
         setAudioPlayer({ callLogId, currentTime: 0, duration: 0 });
         
         // Load the audio
+        console.log('📥 Loading audio file...');
         audioRef.current.load();
       }
 
       // Play the audio
+      console.log('▶️ Starting playback...');
       const playPromise = audioRef.current.play();
       
       if (playPromise !== undefined) {
         await playPromise;
+        console.log('✅ Playback started successfully');
       }
       
       setPlaybackState('playing');
@@ -159,20 +213,30 @@ export const useAudioPlayer = () => {
       setIsLoading(false);
       
     } catch (err: any) {
-      console.error('Error playing audio:', err);
+      console.error('❌ Error playing audio:', err);
       setIsLoading(false);
       setPlaybackState('error');
       
       // Provide user-friendly error message
+      let errorMessage = 'Failed to play audio';
+      
       if (err.name === 'NotAllowedError') {
-        setError('Playback blocked - tap play again to start');
+        errorMessage = 'Playback blocked - tap play again to start';
       } else if (err.name === 'NotSupportedError') {
-        setError('Audio format not supported on this device');
+        errorMessage = 'Audio format not supported on this device';
+      } else if (err.name === 'AbortError') {
+        errorMessage = 'Playback was interrupted';
+      } else if (err.message?.includes('decode') || err.message?.includes('format')) {
+        errorMessage = 'Audio file format is not supported or corrupted';
+      } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
+        errorMessage = 'Network error - cannot load audio file';
       } else if (err.message) {
-        setError(err.message);
+        errorMessage = err.message;
       } else {
-        setError('Failed to play audio - file may be missing or corrupted');
+        errorMessage = 'Failed to play audio - file may be missing or corrupted';
       }
+      
+      setError(errorMessage);
     }
   };
 
@@ -199,11 +263,29 @@ export const useAudioPlayer = () => {
 
   const stop = () => {
     if (audioRef.current) {
+      console.log('⏹️ Stopping audio playback');
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
+      
+      // Clear source to free up resources
+      const currentSrc = audioRef.current.src;
+      audioRef.current.src = '';
+      
+      // Small delay before clearing to ensure proper cleanup
+      if (cleanupTimeoutRef.current) {
+        clearTimeout(cleanupTimeoutRef.current);
+      }
+      cleanupTimeoutRef.current = setTimeout(() => {
+        if (audioRef.current) {
+          audioRef.current.load(); // Trigger resource cleanup
+        }
+        cleanupTimeoutRef.current = null;
+      }, 100);
+      
       setPlaybackState('stopped');
       setAudioPlayer({ isPlaying: false, currentTime: 0, callLogId: null });
       setError(null);
+      console.log('✅ Audio stopped and resources freed');
     }
   };
 
