@@ -91,7 +91,8 @@ export async function uploadRecordingToSupabase(
  */
 async function ensureBucketExists(bucketName: string): Promise<void> {
   try {
-    // Try to get bucket
+    // Try to get bucket - just verify it exists, don't try to create it
+    // Bucket creation is done manually via Supabase Dashboard
     const { data: buckets, error } = await supabase.storage.listBuckets();
 
     if (error) {
@@ -103,20 +104,9 @@ async function ensureBucketExists(bucketName: string): Promise<void> {
     const bucketExists = buckets?.some(b => b.name === bucketName);
 
     if (!bucketExists) {
-      console.log('📁 Creating bucket:', bucketName);
-
-      // Create bucket with public access
-      const { error: createError } = await supabase.storage.createBucket(bucketName, {
-        public: true,
-        fileSizeLimit: 52428800, // 50MB limit
-        allowedMimeTypes: ['audio/mpeg', 'audio/m4a', 'audio/mp3', 'audio/wav', 'audio/aac'],
-      });
-
-      if (createError) {
-        console.error('❌ Error creating bucket:', createError);
-      } else {
-        console.log('✅ Bucket created successfully');
-      }
+      console.warn('⚠️ Bucket does not exist. Please create it manually in Supabase Dashboard:', bucketName);
+      // Don't try to create - this requires admin privileges
+      // Users should create buckets via Supabase Dashboard
     } else {
       console.log('✅ Bucket already exists');
     }
