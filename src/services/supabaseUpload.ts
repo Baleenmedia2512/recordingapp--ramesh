@@ -1,15 +1,23 @@
 /**
  * Supabase Storage Upload Service
- * Handles uploading call recordings to Supabase Storage
- * and automatically sends URLs to LMS
+ * REFACTORED: Uses 100% native Android upload via CallMonitorPlugin
+ * No WebView fetch, no blob conversion, no XMLHttpRequest - fully native!
+ * 
+ * Features:
+ * - Direct file read from native storage
+ * - OkHttp with DNS-over-HTTPS
+ * - Automatic retry with exponential backoff
+ * - Bypasses all WebView networking issues
+ * - Upload queue for automatic retry on failure
  */
 
 import { createClient } from '@supabase/supabase-js';
 import { sendRecordingToLMS, getLMSCallInfo, clearLMSCallInfo } from './googleDriveService';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/env';
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
 import { isOnline, canReach } from '@/lib/network';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
+import { addToQueue } from './uploadQueue';
 
 // Debug: Log environment variables
 console.log('🔍 [supabaseUpload.ts] Supabase URL:', SUPABASE_URL || 'MISSING');
@@ -17,7 +25,7 @@ console.log('🔍 [supabaseUpload.ts] Supabase Key:', SUPABASE_ANON_KEY ? `${SUP
 console.log('🔍 [supabaseUpload.ts] Platform:', Capacitor.getPlatform());
 console.log('🔍 [supabaseUpload.ts] Native Platform:', Capacitor.isNativePlatform());
 
-// Initialize Supabase client with proper configuration for Capacitor
+// Initialize Supabase client (only for web platform and metadata operations)
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession: false,
@@ -26,17 +34,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   global: {
     headers: {
       'X-Client-Info': 'call-monitor-android',
-    },
-    fetch: (url, options = {}) => {
-      console.log('📡 Fetch request to:', url);
-      // Add timeout and proper error handling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      return fetch(url, {
-        ...options,
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
     },
   },
 });
@@ -49,142 +46,14 @@ export interface UploadResult {
 }
 
 /**
- * Native HTTP upload for Android using OkHttp with DNS over HTTPS
- * This bypasses Android's broken system DNS resolver
- */
-async function uploadFileNative(
-  bucketName: string,
-  filePath: string,
-  fileBlob: Blob,
-  originalFilePath?: string
-): Promise<{ data: any; error: any }> {
-  try {
-    console.log('📱 Using native OkHttp upload with DNS over HTTPS...');
-    
-    // If we have the original file path, use the native plugin directly
-    // This avoids converting to/from base64 and uses OkHttp with DoH
-    if (originalFilePath) {
-      console.log('📤 Using native plugin upload with DoH...');
-      console.log('📁 Original file path:', originalFilePath);
-      
-      // Strip file:// prefix if present - native plugin expects raw path
-      let nativePath = originalFilePath;
-      if (nativePath.startsWith('file://')) {
-        nativePath = nativePath.substring(7);
-      }
-      console.log('📁 Native path (stripped):', nativePath);
-      
-      // Extract just the filename from the filePath
-      const pathParts = filePath.split('/');
-      const fileName = pathParts[pathParts.length - 1];
-      const storagePath = pathParts.slice(0, -1).join('/');
-      
-      try {
-        const result = await CallMonitor.uploadToSupabase({
-          filePath: nativePath,  // Use stripped path
-          fileName: fileName,
-          bucketName: bucketName,
-          supabaseUrl: SUPABASE_URL,
-          supabaseKey: SUPABASE_ANON_KEY,
-          storagePath: storagePath,
-        });
-        
-        console.log('✅ Native plugin upload result:', result);
-        
-        if (result.success) {
-          return {
-            data: { path: result.path },
-            error: null,
-          };
-        } else {
-          return {
-            data: null,
-            error: { message: 'Native upload returned unsuccessful' },
-          };
-        }
-      } catch (pluginError: any) {
-        console.error('❌ Native plugin error:', pluginError);
-        // Fall through to CapacitorHttp as fallback
-        console.log('⚠️ Falling back to CapacitorHttp...');
-      }
-    }
-    
-    // Fallback: use CapacitorHttp (may have DNS issues but try anyway)
-    
-    // Convert Blob to ArrayBuffer then to base64
-    const arrayBuffer = await fileBlob.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    const base64Data = btoa(binary);
-    
-    const url = `${SUPABASE_URL}/storage/v1/object/${bucketName}/${filePath}`;
-    console.log('📡 Native upload to:', url);
-    console.log('📦 Upload size:', Math.round(base64Data.length / 1024), 'KB (base64)');
-    
-    const response = await CapacitorHttp.request({
-      url,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'audio/mpeg',
-        'x-upsert': 'false',
-      },
-      data: base64Data,
-    });
-    
-    console.log('📱 Native upload response status:', response.status);
-    
-    if (response.status >= 200 && response.status < 300) {
-      return {
-        data: { path: filePath },
-        error: null,
-      };
-    } else {
-      return {
-        data: null,
-        error: {
-          message: `Upload failed with status ${response.status}: ${JSON.stringify(response.data)}`,
-        },
-      };
-    }
-  } catch (error: any) {
-    console.error('❌ Native upload error:', error);
-    
-    // Check for DNS resolution errors
-    if (error.message?.includes('Unable to resolve host') || 
-        error.message?.includes('UnknownHostException') ||
-        error.message?.includes('No address associated with hostname')) {
-      console.error('🔴 DNS RESOLUTION FAILED');
-      console.error('📱 Device DNS is not configured properly');
-      console.error('💡 Solution: Go to WiFi settings and set DNS to 8.8.8.8');
-      
-      return {
-        data: null,
-        error: {
-          message: 'DNS error: Cannot resolve cloud storage hostname',
-          code: 'DNS_RESOLUTION_FAILED',
-        },
-      };
-    }
-    
-    return {
-      data: null,
-      error: {
-        message: error.message || 'Native upload failed',
-      },
-    };
-  }
-}
-
-/**
  * Upload recording file to Supabase Storage
- * @param file - File object or blob to upload
+ * NATIVE ANDROID: Calls native plugin directly - no WebView involvement!
+ * WEB: Falls back to Supabase JS SDK
+ * 
+ * @param file - File object or blob (ONLY used on web platform)
  * @param fileName - Name for the file
  * @param bucketName - Storage bucket name (default: 'recordings')
- * @param originalFilePath - Original file path on device (for native upload optimization)
+ * @param originalFilePath - REQUIRED for native: Original file path on device storage
  * @returns Upload result with public URL
  */
 export async function uploadRecordingToSupabase(
@@ -195,9 +64,8 @@ export async function uploadRecordingToSupabase(
 ): Promise<UploadResult> {
   try {
     console.log('📤 Starting Supabase upload...', fileName);
-    if (originalFilePath) {
-      console.log('📁 Original file path available:', originalFilePath);
-    }
+    console.log('📱 Platform:', Capacitor.getPlatform());
+    console.log('📁 Original file path:', originalFilePath || 'NOT PROVIDED');
 
     // Check Supabase configuration
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
@@ -220,7 +88,7 @@ export async function uploadRecordingToSupabase(
         };
       }
       
-      // Also check if we can reach Supabase specifically
+      // Quick reachability check (don't wait too long)
       const canReachSupabase = await canReach(SUPABASE_URL, 5000);
       if (!canReachSupabase) {
         console.warn('⚠️ Cannot reach Supabase server');
@@ -233,28 +101,102 @@ export async function uploadRecordingToSupabase(
       console.log('✅ Network connectivity verified');
     }
 
-    // Skip bucket check on native - just try upload directly
-    // The upload will fail with a clear error if bucket doesn't exist
-    if (!Capacitor.isNativePlatform()) {
-      // Only check bucket on web
+    // ============================================================
+    // NATIVE ANDROID/iOS: Use 100% native upload (NO WEBVIEW!)
+    // ============================================================
+    if (Capacitor.isNativePlatform() && originalFilePath) {
+      console.log('🚀 Using NATIVE upload (bypassing WebView completely)');
+      console.log('📁 Reading file directly from:', originalFilePath);
+      
       try {
-        await ensureBucketExists(bucketName);
-      } catch (bucketError: any) {
-        // If it's not a network error, fail
-        if (!bucketError.message?.includes('fetch') && !bucketError.message?.includes('network')) {
-          console.error('❌ Bucket error:', bucketError);
+        const result = await CallMonitor.uploadToSupabase({
+          filePath: originalFilePath,
+          fileName: fileName,
+          bucketName: bucketName,
+          supabaseUrl: SUPABASE_URL,
+          supabaseKey: SUPABASE_ANON_KEY,
+          storagePath: 'call-recordings',
+        });
+        
+        console.log('✅ Native upload result:', result);
+        
+        if (result.success && result.publicUrl) {
           return {
-            success: false,
-            error: bucketError.message || 'Storage bucket not configured.',
+            success: true,
+            fileUrl: result.publicUrl,
+            publicUrl: result.publicUrl,
           };
+        } else {
+          throw new Error('Native upload failed: No public URL returned');
         }
-        // Network error - continue with upload attempt
-        console.warn('⚠️ Skipping bucket check due to network issue, attempting upload...');
+        
+      } catch (nativeError: any) {
+        console.error('❌ Native upload error:', nativeError);
+        
+        // Parse native error message for user-friendly display
+        let errorMessage = nativeError.message || 'Native upload failed';
+        
+        if (errorMessage.includes('DNS error') || errorMessage.includes('DNS_RESOLUTION_FAILED')) {
+          errorMessage = '🌐 DNS Error: Cannot reach cloud storage.\n\n' +
+                        '📱 Fix on device:\n' +
+                        '1. Settings → WiFi → Modify Network\n' +
+                        '2. Advanced → Static IP\n' +
+                        '3. DNS 1: 8.8.8.8\n' +
+                        '4. DNS 2: 8.8.4.4\n\n' +
+                        'Recording saved locally.';
+        } else if (errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')) {
+          errorMessage = '⏱️ Upload timeout. Network too slow or unstable. Recording saved locally.';
+        } else if (errorMessage.includes('File not found')) {
+          errorMessage = '📁 Recording file not found. May have been deleted.';
+        } else if (errorMessage.includes('Permission denied')) {
+          errorMessage = '🔒 Permission denied. Check app storage permissions.';
+        } else if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+          errorMessage = '🪣 Storage bucket "recordings" not found. Check Supabase configuration.';
+        } else if (errorMessage.includes('403') || errorMessage.includes('permission')) {
+          errorMessage = '🔒 Permission denied. Check bucket policies in Supabase Dashboard.';
+        } else if (errorMessage.includes('Network error') || errorMessage.includes('NETWORK_ERROR')) {
+          errorMessage = '📵 Network error. Recording saved locally.';
+        }
+        
+        // Add to upload queue for automatic retry (excluding file not found errors)
+        if (!errorMessage.includes('File not found') && originalFilePath) {
+          console.log('📋 Adding failed upload to retry queue...');
+          try {
+            await addToQueue({
+              filePath: originalFilePath,
+              fileName: fileName,
+              duration: 0, // Will be updated if available
+              fileSize: file.size || 0,
+            });
+            console.log('✅ Added to upload queue for automatic retry');
+          } catch (queueError) {
+            console.error('❌ Failed to add to queue:', queueError);
+          }
+        }
+        
+        return {
+          success: false,
+          error: errorMessage,
+        };
       }
-    } else {
-      console.log('📱 Native platform - skipping bucket check, will try upload directly');
     }
-
+    
+    // ============================================================
+    // WEB PLATFORM: Use Supabase JS SDK (only for web)
+    // ============================================================
+    console.log('🌐 Using WEB upload (Supabase JS SDK)');
+    
+    // Check if blob/file is valid
+    if (!file || file.size === 0) {
+      console.error('❌ Invalid file/blob for upload');
+      return {
+        success: false,
+        error: 'Invalid file data',
+      };
+    }
+    
+    console.log('📦 File size:', file.size, 'bytes');
+    
     // Generate unique filename with timestamp
     const timestamp = Date.now();
     const uniqueFileName = `${timestamp}_${fileName}`;
@@ -262,101 +204,31 @@ export async function uploadRecordingToSupabase(
 
     console.log('📁 Uploading to path:', filePath);
 
-    // Upload file to Supabase Storage with retry
-    let uploadError: any = null;
-    let uploadData: any = null;
-    
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      console.log(`📤 Upload attempt ${attempt}/3...`);
-      
-      try {
-        let data: any, error: any;
-        
-        // Use native HTTP on Android to bypass CORS
-        if (Capacitor.isNativePlatform()) {
-          const result = await uploadFileNative(bucketName, filePath, file, originalFilePath);
-          data = result.data;
-          error = result.error;
-        } else {
-          // Use regular Supabase SDK on web
-          const fetchController = new AbortController();
-          const timeoutId = setTimeout(() => fetchController.abort(), 25000);
-          
-          const result = await supabase.storage
-            .from(bucketName)
-            .upload(filePath, file, {
-              contentType: 'audio/mpeg',
-              cacheControl: '3600',
-              upsert: false,
-            });
-          
-          clearTimeout(timeoutId);
-          data = result.data;
-          error = result.error;
-        }
+    // Determine MIME type
+    const mimeType = fileName.endsWith('.m4a') ? 'audio/mp4' :
+                     fileName.endsWith('.mp3') ? 'audio/mpeg' :
+                     fileName.endsWith('.wav') ? 'audio/wav' :
+                     fileName.endsWith('.3gp') ? 'audio/3gpp' :
+                     fileName.endsWith('.amr') ? 'audio/amr' :
+                     'audio/mp4';
 
-        if (!error) {
-          uploadData = data;
-          uploadError = null;
-          break;
-        }
-        
-        uploadError = error;
-        console.warn(`⚠️ Upload attempt ${attempt} failed:`, error.message);
-      } catch (abortError: any) {
-        if (abortError.name === 'AbortError') {
-          uploadError = new Error('Upload timeout - network too slow or unavailable');
-          console.warn(`⏱️ Upload attempt ${attempt} timed out`);
-        } else {
-          uploadError = abortError;
-          console.warn(`⚠️ Upload attempt ${attempt} error:`, abortError.message);
-        }
-      }
-      
-      // Wait before retry (exponential backoff)
-      if (attempt < 3) {
-        const delay = attempt * 2000; // 2s, 4s
-        console.log(`⏳ Waiting ${delay}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
+    // Upload using Supabase SDK
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(filePath, file, {
+        contentType: mimeType,
+        cacheControl: '3600',
+        upsert: false,
+      });
 
     if (uploadError) {
-      console.error('❌ Supabase upload error after 3 attempts:', uploadError);
-      
-      // Provide helpful error messages
-      let errorMessage = uploadError.message;
-      
-      // Check for DNS resolution errors
-      if (errorMessage.includes('Unable to resolve host') || 
-          errorMessage.includes('UnknownHostException') ||
-          errorMessage.includes('No address associated with hostname')) {
-        errorMessage = '🌐 DNS Error: Cannot reach cloud storage.\n\n' +
-                      '📱 Fix on device:\n' +
-                      '1. Settings → WiFi → Modify Network\n' +
-                      '2. Advanced → Static IP\n' +
-                      '3. DNS 1: 8.8.8.8\n' +
-                      '4. DNS 2: 8.8.4.4\n\n' +
-                      'Recording saved locally.';
-        console.error('🔴 DNS RESOLUTION FAILED - Device cannot resolve Supabase domain');
-        console.error('📱 SOLUTION: Configure device DNS to 8.8.8.8 (Google DNS)');
-      } else if (errorMessage.includes('not found')) {
-        errorMessage = '🪣 Storage bucket "recordings" not found';
-      } else if (errorMessage.includes('permission') || errorMessage.includes('policy')) {
-        errorMessage = '🔒 Permission denied. Check bucket policies.';
-      } else if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
-        errorMessage = '📵 Network error. Recording saved locally. Will retry on next sync.';
-      }
-      
-      return {
-        success: false,
-        error: errorMessage,
-      };
+      console.error('❌ Supabase upload error:', uploadError);
+      throw uploadError;
     }
 
     console.log('✅ File uploaded to Supabase:', uploadData.path);
 
-    // Get public URL for the uploaded file
+    // Get public URL
     const { data: urlData } = supabase.storage
       .from(bucketName)
       .getPublicUrl(filePath);
@@ -369,6 +241,7 @@ export async function uploadRecordingToSupabase(
       fileUrl: publicUrl,
       publicUrl: publicUrl,
     };
+    
   } catch (error: any) {
     console.error('❌ Supabase upload failed:', error);
     
@@ -388,86 +261,45 @@ export async function uploadRecordingToSupabase(
 }
 
 /**
- * Ensure storage bucket exists, create if not
- * Returns true if bucket exists or check should be skipped
+ * Ensure storage bucket exists (for web platform only)
+ * Native platforms skip this check - upload will fail with clear error if bucket missing
  */
 async function ensureBucketExists(bucketName: string): Promise<boolean> {
   try {
-    let data: any, error: any;
+    console.log('🔍 Checking if bucket exists:', bucketName);
     
-    // Use native HTTP on Android to bypass CORS
-    if (Capacitor.isNativePlatform()) {
-      const url = `${SUPABASE_URL}/storage/v1/bucket`;
-      console.log('📱 Native bucket check:', url);
-      
-      try {
-        const response = await CapacitorHttp.get({
-          url,
-          headers: {
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-        });
-        
-        if (response.status >= 200 && response.status < 300) {
-          data = response.data;
-          error = null;
-        } else {
-          error = { message: `Bucket check failed with status ${response.status}` };
-        }
-      } catch (nativeError: any) {
-        console.warn('⚠️ Native bucket check error, will attempt upload anyway:', nativeError.message);
-        return true; // Skip check on native, try upload anyway
-      }
-    } else {
-      // Use regular Supabase SDK on web
-      const result = await supabase.storage.listBuckets();
-      data = result.data;
-      error = result.error;
-    }
+    const result = await supabase.storage.listBuckets();
+    const data = result.data;
+    const error = result.error;
 
     if (error) {
-      console.error('❌ Error checking buckets:', error);
-      
-      // If it's a network error, skip bucket check and try upload anyway
-      if (error.message?.includes('fetch') || error.message?.includes('network')) {
-        console.warn('⚠️ Network error checking bucket, will attempt upload anyway');
-        return true; // Skip check, try upload
-      }
-      
-      throw new Error(`Bucket check failed: ${error.message}`);
+      console.warn('⚠️ Error checking buckets (non-fatal):', error);
+      return true; // Skip check, attempt upload anyway
     }
     
-    if (!data) {
-      console.warn('⚠️ No buckets returned, will attempt upload anyway');
-      return true; // Skip check, try upload
+    if (!data || !Array.isArray(data)) {
+      console.warn('⚠️ No bucket data returned');
+      return true; // Skip check, attempt upload anyway
     }
 
-    // Check if bucket exists
-    const buckets = Array.isArray(data) ? data : [];
-    console.log('📋 Available buckets:', JSON.stringify(buckets.map((b: any) => b.name || b.id || b)));
-    console.log('🔍 Looking for bucket:', bucketName);
-    
-    // Check by name or id (Supabase sometimes uses different field names)
-    const bucketExists = buckets?.some((b: any) => 
-      b.name === bucketName || b.id === bucketName || b === bucketName
+    const bucketExists = data.some((b: any) => 
+      b.name === bucketName || b.id === bucketName
     );
 
     if (!bucketExists) {
-      console.warn('⚠️ Bucket does not exist:', bucketName, 'Available:', buckets.map((b: any) => b.name || b.id));
+      console.warn('⚠️ Bucket does not exist:', bucketName);
       throw new Error(`Storage bucket "${bucketName}" not found. Please create it in Supabase Dashboard.`);
-    } else {
-      console.log('✅ Bucket already exists');
     }
     
+    console.log('✅ Bucket exists');
     return true;
-  } catch (error: any) {
-    console.error('❌ Error in ensureBucketExists:', error);
     
-    // If it's a network error, return true to attempt upload anyway
+  } catch (error: any) {
+    console.error('❌ Error checking bucket:', error);
+    // If network error, allow upload attempt anyway
     if (error.message?.includes('fetch') || error.message?.includes('network')) {
       return true;
     }
-    
     throw error;
   }
 }
@@ -487,18 +319,30 @@ export async function uploadAndSyncToLMS(
   duration: number,
   originalFilePath?: string
 ): Promise<{ success: boolean; sentToLMS: boolean; url?: string }> {
+  console.log('📋 uploadAndSyncToLMS called with:');
+  console.log('   fileName:', fileName);
+  console.log('   duration:', duration);
+  console.log('   originalFilePath:', originalFilePath);
+  console.log('   blob size:', file.size, 'bytes');
+  
   try {
     // 1. Upload to Supabase
+    console.log('1️⃣ Calling uploadRecordingToSupabase...');
     const uploadResult = await uploadRecordingToSupabase(file, fileName, 'recordings', originalFilePath);
+    console.log('1️⃣ uploadRecordingToSupabase returned:', JSON.stringify(uploadResult));
 
     if (!uploadResult.success || !uploadResult.publicUrl) {
+      console.error('❌ Upload failed or no public URL:', uploadResult);
       return {
         success: false,
         sentToLMS: false,
       };
     }
 
+    console.log('✅ Upload successful! URL:', uploadResult.publicUrl);
+
     // 2. Check if this was an LMS call
+    console.log('2️⃣ Checking for LMS call info...');
     const lmsCallInfo = getLMSCallInfo();
 
     if (!lmsCallInfo) {
@@ -511,7 +355,7 @@ export async function uploadAndSyncToLMS(
     }
 
     // 3. Send to LMS
-    console.log('📨 Sending recording to LMS...');
+    console.log('3️⃣ Sending recording to LMS...');
     console.log('   CallLog ID:', lmsCallInfo.callLogId);
     console.log('   Lead:', lmsCallInfo.leadName);
     console.log('   Recording URL:', uploadResult.publicUrl);
@@ -536,6 +380,7 @@ export async function uploadAndSyncToLMS(
     };
   } catch (error: any) {
     console.error('❌ Error in uploadAndSyncToLMS:', error);
+    console.error('❌ Error stack:', error.stack);
     return {
       success: false,
       sentToLMS: false,
@@ -544,10 +389,13 @@ export async function uploadAndSyncToLMS(
 }
 
 /**
- * Convert local file path to File object for upload
- * For use with Capacitor/native file system
+ * Convert local file path to Blob (DEPRECATED - only for web)
+ * Native platforms now use direct file path upload via native plugin
  */
 export async function filePathToBlob(filePath: string): Promise<Blob | null> {
+  console.warn('⚠️ filePathToBlob is deprecated for native platforms');
+  console.warn('⚠️ Use CallMonitor.uploadToSupabase with file path directly');
+  
   try {
     const response = await fetch(filePath);
     const blob = await response.blob();

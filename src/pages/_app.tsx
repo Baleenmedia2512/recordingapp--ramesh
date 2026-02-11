@@ -5,8 +5,13 @@ import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { App as CapacitorApp } from '@capacitor/app';
 import { testLMSConnection } from '@/services/lmsApi';
+import { startQueueManager } from '@/services/uploadQueueManager';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 
 export default function App({ Component, pageProps }: AppProps) {
+  // Monitor network status (triggers upload retry on reconnect)
+  const networkStatus = useNetworkStatus();
+
   useEffect(() => {
     // Initialize Capacitor plugins
     if (Capacitor.isNativePlatform()) {
@@ -34,7 +39,21 @@ export default function App({ Component, pageProps }: AppProps) {
     }).catch((error) => {
       console.error('❌ Error testing LMS connection:', error);
     });
+
+    // Start upload queue manager for automatic retry
+    console.log('🚀 Starting upload queue manager...');
+    startQueueManager();
+    console.log('✅ Upload queue manager started');
   }, []);
+
+  // Log network status changes
+  useEffect(() => {
+    if (networkStatus.isOnline) {
+      console.log('🌐 Network status: ONLINE');
+    } else {
+      console.log('📵 Network status: OFFLINE');
+    }
+  }, [networkStatus.isOnline]);
 
   return <Component {...pageProps} />;
 }
