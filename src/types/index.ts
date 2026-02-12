@@ -3,7 +3,8 @@
 export type CallType = 'incoming' | 'outgoing' | 'missed' | 'rejected' | 'voicemail';
 
 export interface CallLog {
-  id: string;
+  id: string; // UUID from database
+  native_call_id?: string; // Original ID from Android/iOS call log (often numeric)
   user_id: string;
   phone_number: string;
   contact_name?: string;

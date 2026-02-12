@@ -6,6 +6,7 @@ import { isMockMode } from '@/lib/supabase';
 import { Capacitor } from '@capacitor/core';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
 import { uploadAndSyncToLMS } from '@/services/supabaseUpload';
+import { handleOutgoingCall } from '@/services/googleDriveService';
 
 // Performance constants
 const LOAD_TIMEOUT_MS = 3000; // 3 second timeout for loading
@@ -81,7 +82,7 @@ const mockCallLogs: CallLog[] = [
 ];
 
 export const useCallLogs = () => {
-  const { callLogs, setCallLogs, filters, isLoading, setIsLoading } = useStore();
+  const { callLogs, setCallLogs, filters, isLoading, setIsLoading, user } = useStore();
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [newCallsCount, setNewCallsCount] = useState(0);
@@ -99,9 +100,15 @@ export const useCallLogs = () => {
 
   // Helper to gracefully handle missing data
   const sanitizeCallLog = (log: any): CallLog => {
+    // Generate a temporary ID for local use (UUID format)
+    const tempId = log.id && log.id.includes('-') 
+      ? log.id // Already a UUID
+      : `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     return {
-      id: log.id || String(Math.random()),
-      user_id: log.user_id || 'local',
+      id: tempId,
+      native_call_id: log.id || log.native_call_id || undefined, // Store original Android ID
+      user_id: log.user_id || user?.id, // Let database default handle if undefined
       phone_number: log.phone_number || 'Unknown Number',
       contact_name: log.contact_name || undefined,
       call_type: log.call_type || 'unknown',
@@ -156,7 +163,7 @@ export const useCallLogs = () => {
           // Transform and sanitize native logs
           const transformedLogs = nativeLogs.map((log: any) => sanitizeCallLog({
             id: log.id,
-            user_id: 'local',
+            user_id: user?.id, // Let database default handle if undefined
             phone_number: log.phone_number,
             contact_name: log.contact_name,
             call_type: log.call_type,
@@ -329,10 +336,36 @@ export const useCallLogs = () => {
         
         // Listen for phone state changes
         const phoneStateListener = await CallMonitor.addListener('phoneStateChanged', async (data) => {
-          console.log('Phone state changed:', data);
+          console.log('📞 Phone state changed:', data);
           console.log('🔍 DEBUG - Phone state data:', JSON.stringify(data));
           console.log('🔍 DEBUG - data.type:', data.type);
           console.log('🔍 DEBUG - data.state:', (data as any).state);
+          
+          // ============================================================
+          // ✅ LMS INTEGRATION: Detect outgoing call start
+          // ============================================================
+          if (data.type === 'outgoing_call_started' || 
+              (data as any).state === 'OFFHOOK' || 
+              data.type === 'call_started') {
+            console.log('📞 ========================================');
+            console.log('📞 [OUTGOING CALL DETECTED]');
+            console.log('   Phone:', (data as any).phoneNumber);
+            console.log('   Type:', data.type);
+            console.log('📞 ========================================');
+            
+            try {
+              const phoneNumber = (data as any).phoneNumber || (data as any).number;
+              if (phoneNumber) {
+                console.log('🔍 Checking if this call is from LMS...');
+                await handleOutgoingCall(phoneNumber, new Date());
+              } else {
+                console.warn('⚠️ No phone number in call data');
+              }
+            } catch (error) {
+              console.error('❌ Error handling outgoing call for LMS:', error);
+            }
+          }
+          // ============================================================
           
           if (data.type === 'call_ended') {
             console.log('✅ ENTERED call_ended block!');
@@ -495,12 +528,22 @@ export const useCallLogs = () => {
                     if (uploadResult.url) {
                       console.log('✅ Auto-upload successful!', uploadResult.url);
                       
-                      // ✅ FIX #2: Save recording URL to database
+                      // ✅ FIX #2: Save recording URL to database (with full call log data for upsert)
                       try {
                         console.log('💾 Saving recording URL to database...');
                         await callLogApi.updateCallLog(latestLog.id, {
                           recording_url: uploadResult.url,
                           has_recording: true,
+                          native_call_id: latestLog.native_call_id, // Include native Android ID
+                          // Include full call log data for upsert fallback
+                          phone_number: latestLog.phone_number,
+                          contact_name: latestLog.contact_name,
+                          call_type: latestLog.call_type,
+                          timestamp: latestLog.timestamp,
+                          duration: latestLog.duration,
+                          device_id: latestLog.device_id,
+                          device_platform: latestLog.device_platform,
+                          user_id: latestLog.user_id || user?.id, // Let database default handle if undefined
                         });
                         console.log('✅ Recording URL saved to database!');
                         

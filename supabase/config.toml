@@ -1,0 +1,10 @@
+# Supabase Edge Functions Configuration
+
+# Edge Function configuration
+[functions.notify-lms]
+verify_jwt = false  # Allow database webhooks to call this function
+
+# Environment variables (set via CLI: npx supabase secrets set ...)
+# LMS_BASE_URL = "https://e2wleadmanager.vercel.app"
+# LMS_API_KEY = "CallMonitor-LMS-SecretKey-2026-Feb-Random-789xyz"
+

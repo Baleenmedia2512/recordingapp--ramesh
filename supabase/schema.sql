@@ -210,3 +210,52 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
+-- =========================================
+-- LMS Integration via Edge Function
+-- =========================================
+
+-- Function to notify LMS via Edge Function when recording is uploaded
+-- This bypasses mobile network restrictions by using server-to-server communication
+CREATE OR REPLACE FUNCTION notify_lms_on_recording()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Only trigger if recording_url has been added or updated
+  IF (TG_OP = 'UPDATE' AND NEW.recording_url IS NOT NULL AND 
+      (OLD.recording_url IS NULL OR OLD.recording_url != NEW.recording_url)) OR
+     (TG_OP = 'INSERT' AND NEW.recording_url IS NOT NULL) THEN
+    
+    -- Call the Edge Function asynchronously via pg_net extension
+    -- Note: You need to enable pg_net extension and configure it with your Supabase project URL
+    -- For now, we'll use Supabase's webhook approach (configured in dashboard)
+    
+    PERFORM net.http_post(
+      url := current_setting('app.supabase_url') || '/functions/v1/notify-lms',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || current_setting('app.supabase_anon_key')
+      ),
+      body := jsonb_build_object(
+        'type', TG_OP,
+        'table', TG_TABLE_NAME,
+        'record', row_to_json(NEW),
+        'old_record', CASE WHEN TG_OP = 'UPDATE' THEN row_to_json(OLD) ELSE NULL END
+      )
+    );
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create trigger on call_logs table
+-- Note: This trigger requires pg_net extension to be enabled
+-- Alternative: Configure webhook in Supabase Dashboard -> Database -> Webhooks
+CREATE TRIGGER on_recording_uploaded
+  AFTER INSERT OR UPDATE ON public.call_logs
+  FOR EACH ROW
+  WHEN (NEW.recording_url IS NOT NULL)
+  EXECUTE PROCEDURE notify_lms_on_recording();
+
+-- Instructions for enabling pg_net extension (run this as superuser):
+-- CREATE EXTENSION IF NOT EXISTS pg_net;

@@ -25,7 +25,17 @@ export async function checkLMSCall(
   }
 
   try {
-    console.log('[LMS] Checking if call is from LMS:', phoneNumber);
+    const requestPayload = {
+      phone: phoneNumber,
+      timestamp: timestamp.toISOString(),
+      apiKey: LMS_CONFIG.apiKey?.substring(0, 10) + '...', // Hide full key in logs
+    };
+    
+    console.log('🔔 [LMS TRIGGER] Match Call API Called');
+    console.log('   📞 Phone:', phoneNumber);
+    console.log('   ⏰ Timestamp:', timestamp.toISOString());
+    console.log('   🌐 Endpoint:', `${LMS_CONFIG.baseUrl}${LMS_CONFIG.endpoints.matchCall}`);
+    console.log('   📦 Payload:', JSON.stringify(requestPayload, null, 2));
     
     const response = await fetch(
       `${LMS_CONFIG.baseUrl}${LMS_CONFIG.endpoints.matchCall}`,
@@ -39,26 +49,43 @@ export async function checkLMSCall(
           timestamp: timestamp.toISOString(),
           apiKey: LMS_CONFIG.apiKey,
         }),
-        signal: AbortSignal.timeout(5000), // 5 second timeout
+        signal: AbortSignal.timeout(15000), // 15 second timeout for mobile networks
       }
     );
 
     if (!response.ok) {
-      console.error('[LMS] Match call API error:', response.status);
+      console.error('❌ [LMS RESPONSE] Match Call Failed');
+      console.error('   Status:', response.status, response.statusText);
+      console.error('   URL:', response.url);
+      try {
+        const errorBody = await response.text();
+        console.error('   Error Body:', errorBody);
+      } catch (e) {
+        console.error('   Could not read error body');
+      }
       return null;
     }
 
     const data = await response.json();
+    console.log('✅ [LMS RESPONSE] Match Call Response:', JSON.stringify(data, null, 2));
     
     if (data.isLMSCall) {
-      console.log('[LMS] ✅ Match found! Lead:', data.leadName);
+      console.log('🎯 [LMS MATCH] Call matched to LMS!');
+      console.log('   👤 Lead:', data.leadName);
+      console.log('   📋 CallLog ID:', data.callLogId);
+      console.log('   🆔 Lead ID:', data.leadId);
       return data;
     } else {
-      console.log('[LMS] ℹ️ No match - regular call');
+      console.log('ℹ️ [LMS] No match - regular call (not from LMS)');
       return null;
     }
-  } catch (error) {
-    console.error('[LMS] Error checking LMS call:', error);
+  } catch (error: any) {
+    console.error('❌ [LMS ERROR] Match Call Exception');
+    console.error('   Error:', error.message);
+    console.error('   Type:', error.name);
+    if (error.stack) {
+      console.error('   Stack:', error.stack);
+    }
     return null;
   }
 }
@@ -83,7 +110,22 @@ export async function updateLMSRecording(
   }
 
   try {
-    console.log('[LMS] Updating recording for CallLog:', callLogId);
+    const requestPayload = {
+      callLogId,
+      recordingUrl,
+      duration,
+      recordingAppCallId,
+      apiKey: LMS_CONFIG.apiKey?.substring(0, 10) + '...', // Hide full key in logs
+    };
+    
+    console.log('🔔 [LMS TRIGGER] Update Recording API Called');
+    console.log('   📋 CallLog ID:', callLogId);
+    console.log('   🎵 Recording URL:', recordingUrl);
+    console.log('   ⏱️ Duration:', duration, 'seconds');
+    console.log('   🆔 Recording App Call ID:', recordingAppCallId || 'N/A');
+    console.log('   🌐 Endpoint:', `${LMS_CONFIG.baseUrl}${LMS_CONFIG.endpoints.updateRecording}`);
+    console.log('   📦 Payload:', JSON.stringify(requestPayload, null, 2));
+    console.log('   ⏰ Timestamp:', new Date().toISOString());
     
     const response = await fetch(
       `${LMS_CONFIG.baseUrl}${LMS_CONFIG.endpoints.updateRecording}`,
@@ -99,26 +141,43 @@ export async function updateLMSRecording(
           recordingAppCallId,
           apiKey: LMS_CONFIG.apiKey,
         }),
-        signal: AbortSignal.timeout(10000), // 10 second timeout
+        signal: AbortSignal.timeout(20000), // 20 second timeout for mobile networks
       }
     );
 
     if (!response.ok) {
-      console.error('[LMS] Update recording API error:', response.status);
+      console.error('❌ [LMS RESPONSE] Update Recording Failed');
+      console.error('   Status:', response.status, response.statusText);
+      console.error('   URL:', response.url);
+      try {
+        const errorBody = await response.text();
+        console.error('   Error Body:', errorBody);
+      } catch (e) {
+        console.error('   Could not read error body');
+      }
       return false;
     }
 
     const data = await response.json();
+    console.log('✅ [LMS RESPONSE] Update Recording Response:', JSON.stringify(data, null, 2));
     
     if (data.success) {
-      console.log('[LMS] ✅ Recording updated successfully!');
+      console.log('🎉 [LMS SUCCESS] Recording URL sent to LMS successfully!');
+      console.log('   ✅ LMS can now play the recording');
+      console.log('   ✅ Sales team will see recording in lead details');
       return true;
     } else {
-      console.error('[LMS] ❌ Failed to update recording');
+      console.error('❌ [LMS FAILED] LMS rejected the recording update');
+      console.error('   Response data:', data);
       return false;
     }
-  } catch (error) {
-    console.error('[LMS] Error updating LMS recording:', error);
+  } catch (error: any) {
+    console.error('❌ [LMS ERROR] Update Recording Exception');
+    console.error('   Error:', error.message);
+    console.error('   Type:', error.name);
+    if (error.stack) {
+      console.error('   Stack:', error.stack);
+    }
     return false;
   }
 }

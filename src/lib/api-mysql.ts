@@ -10,7 +10,7 @@ export async function fetchCallLogs(
     SELECT 
       cl.*,
       d.platform as device_platform
-    FROM call_logs cl
+    FROM CallLog cl
     JOIN devices d ON cl.device_id = d.id
     WHERE cl.user_id = ?
   `;
@@ -58,7 +58,7 @@ export async function getCallLog(
 ): Promise<CallLog | null> {
   const logs = await query<any[]>(
     `SELECT cl.*, d.platform as device_platform
-     FROM call_logs cl
+     FROM CallLog cl
      JOIN devices d ON cl.device_id = d.id
      WHERE cl.id = ? AND cl.user_id = ?`,
     [callLogId, userId]
@@ -74,7 +74,7 @@ export async function createCallLog(
   data: Partial<CallLog>
 ): Promise<CallLog> {
   const result = await query<any>(
-    `INSERT INTO call_logs 
+    `INSERT INTO CallLog 
      (user_id, device_id, phone_number, contact_name, call_type, timestamp, duration, has_recording, device_platform)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
@@ -91,7 +91,7 @@ export async function createCallLog(
   );
 
   const insertId = result.insertId;
-  const logs = await query<any[]>('SELECT * FROM call_logs WHERE id = ?', [insertId]);
+  const logs = await query<any[]>('SELECT * FROM CallLog WHERE id = ?', [insertId]);
   
   return logs[0];
 }
@@ -119,7 +119,7 @@ export async function updateCallLog(
   if (updates.length > 0) {
     params.push(callLogId, userId);
     await query(
-      `UPDATE call_logs SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
+      `UPDATE CallLog SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
       params
     );
   }
@@ -131,7 +131,7 @@ export async function deleteCallLog(
   callLogId: string
 ): Promise<void> {
   await query(
-    'DELETE FROM call_logs WHERE id = ? AND user_id = ?',
+    'DELETE FROM CallLog WHERE id = ? AND user_id = ?',
     [callLogId, userId]
   );
 }
