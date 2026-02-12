@@ -1,18 +1,29 @@
 import { useEffect, useCallback, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
-import { testLMSConnection } from '@/services/lmsApi';
+import { testLMSConnection, updateLMSRecording } from '@/services/lmsApi';
 import { 
   handleOutgoingCall, 
   sendRecordingToLMS, 
   completeRecordingUpload,
   getLMSCallInfo 
 } from '@/services/googleDriveService';
+import { 
+  initializeLMSServer, 
+  handleLMSCallContext, 
+  checkLMSContext,
+  lmsHttpServer,
+  LMSCallContext 
+} from '@/services/lmsHttpServer';
 
 export interface LMSStatus {
   isConnected: boolean;
   lastChecked: Date | null;
   currentLMSCall: any | null;
+  serverStatus: {
+    isRunning: boolean;
+    activeContexts: number;
+  };
 }
 
 /**
@@ -24,11 +35,36 @@ export const useLMSIntegration = () => {
     isConnected: false,
     lastChecked: null,
     currentLMSCall: null,
+    serverStatus: {
+      isRunning: false,
+      activeContexts: 0
+    }
   });
 
   /**
-   * Test LMS connection
+   * Initialize LMS HTTP server for receiving call context
    */
+  const initializeLMSHttpServer = useCallback(async () => {
+    try {
+      const success = await initializeLMSServer();
+      console.log(`🏢 [LMS Hook] HTTP Server ${success ? 'started' : 'failed to start'}`);
+      
+      // Update server status
+      const serverStatus = lmsHttpServer.getStatus();
+      setLmsStatus(prev => ({
+        ...prev,
+        serverStatus: {
+          isRunning: serverStatus.isRunning,
+          activeContexts: serverStatus.activeContexts
+        }
+      }));
+      
+      return success;
+    } catch (error) {
+      console.error('[LMS Hook] Error initializing HTTP server:', error);
+      return false;
+    }
+  }, []);
   const checkLMSConnection = useCallback(async () => {
     try {
       const connected = await testLMSConnection();
@@ -45,6 +81,65 @@ export const useLMSIntegration = () => {
         isConnected: false,
         lastChecked: new Date(),
       }));
+      return false;
+    }
+  }, []);
+
+  /**
+   * Set LMS call context (called by LMS before making call)
+   */
+  const setLMSCallContext = useCallback((context: Omit<LMSCallContext, 'timestamp' | 'expiresAt'>) => {
+    handleLMSCallContext(context);
+    
+    // Update status
+    const serverStatus = lmsHttpServer.getStatus();
+    setLmsStatus(prev => ({
+      ...prev,
+      currentLMSCall: context,
+      serverStatus: {
+        isRunning: serverStatus.isRunning,
+        activeContexts: serverStatus.activeContexts
+      }
+    }));
+    
+    console.log('🏢 [LMS Hook] Call context set for:', context.phoneNumber);
+  }, []);
+  
+  /**
+   * Send recording directly to LMS using new updateLMSRecording function
+   */
+  const sendRecordingDirectToLMS = useCallback(async (
+    callLogId: string,
+    recordingUrl: string,
+    duration: number,
+    phoneNumber?: string,
+    recordingId?: string
+  ): Promise<boolean> => {
+    try {
+      const success = await updateLMSRecording(
+        callLogId, 
+        recordingUrl, 
+        duration, 
+        recordingId,
+        phoneNumber
+      );
+      
+      if (success && phoneNumber) {
+        // Update status after successful send
+        const serverStatus = lmsHttpServer.getStatus();
+        setLmsStatus(prev => ({
+          ...prev,
+          currentLMSCall: null,
+          serverStatus: {
+            isRunning: serverStatus.isRunning,
+            activeContexts: serverStatus.activeContexts
+          }
+        }));
+      }
+      
+      return success;
+    } catch (error) {
+      console.error('[LMS Hook] Error sending recording to LMS:', error);
       return false;
     }
   }, []);
@@ -174,17 +269,25 @@ export const useLMSIntegration = () => {
   }, [processOutgoingCall]);
 
   /**
-   * Check LMS connection on mount
+   * Initialize LMS server and check connection on mount
    */
   useEffect(() => {
-    checkLMSConnection();
-  }, [checkLMSConnection]);
+    const initialize = async () => {
+      await initializeLMSHttpServer();
+      await checkLMSConnection();
+    };
+    
+    initialize();
+  }, [initializeLMSHttpServer, checkLMSConnection]);
 
   return {
     lmsStatus,
     checkLMSConnection,
+    initializeLMSHttpServer,
+    setLMSCallContext,
     processOutgoingCall,
     sendRecordingToLMSServer,
+    sendRecordingDirectToLMS,
     completeRecordingFlow,
     getCurrentLMSCall,
   };

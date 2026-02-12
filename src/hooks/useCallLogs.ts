@@ -509,7 +509,8 @@ export const useCallLogs = () => {
                         blob,
                         recording.fileName,
                         latestLog.duration || 0,
-                        recording.filePath  // Pass original file path for native upload with DNS over HTTPS
+                        recording.filePath,  // Pass original file path for native upload with DNS over HTTPS
+                        latestLog.phone_number  // Pass phone number for LMS context check
                       );
                       console.log('📡 Upload result received:', JSON.stringify(uploadResult));
                     } catch (uploadError: any) {

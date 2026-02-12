@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useLMSIntegration } from '@/hooks/useLMSIntegration';
 import Dashboard from '@/components/Dashboard';
 import PermissionsManager from '@/components/PermissionsManager';
 import { Capacitor } from '@capacitor/core';
@@ -12,9 +13,12 @@ export default function Home() {
     permissionStatus,
     platformCapabilities 
   } = usePermissions();
+  
+  const { lmsStatus, initializeLMSHttpServer } = useLMSIntegration();
+  
   const [appReady, setAppReady] = useState(false);
 
-  // Track app initialization time for performance
+  // Track app initialization time for performance and initialize LMS
   useEffect(() => {
     const startTime = performance.now();
     
@@ -22,9 +26,15 @@ export default function Home() {
     if (!isChecking) {
       const loadTime = performance.now() - startTime;
       console.log(`App initialized in ${loadTime.toFixed(2)}ms`);
+      
+      // Initialize LMS HTTP server
+      initializeLMSHttpServer().then(success => {
+        console.log(`🏢 LMS Server initialization: ${success ? 'SUCCESS' : 'FAILED'}`);
+      });
+      
       setAppReady(true);
     }
-  }, [isChecking]);
+  }, [isChecking, initializeLMSHttpServer]);
 
   // Get platform-specific info for header
   const getPlatformBadge = () => {
@@ -53,6 +63,11 @@ export default function Home() {
               {allRequiredGranted && (
                 <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
                   ✓ Active
+                </span>
+              )}
+              {lmsStatus.serverStatus.isRunning && (
+                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
+                  🏢 LMS Ready
                 </span>
               )}
             </div>

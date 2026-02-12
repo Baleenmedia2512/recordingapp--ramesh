@@ -1,4 +1,5 @@
 import LMS_CONFIG from '../config/lms.config';
+import { checkLMSContext, clearLMSContext, LMSCallContext } from './lmsHttpServer';
 
 export interface LMSCallData {
   isLMSCall: boolean;
@@ -6,10 +7,12 @@ export interface LMSCallData {
   leadId?: string;
   leadName?: string;
   leadPhone?: string;
+  context?: LMSCallContext; // Add context from proactive LMS integration
 }
 
 /**
  * Check if an outgoing call was initiated from LMS
+ * First checks for proactive context, then falls back to match call API
  * @param phoneNumber - The phone number being called (e.g., "9876543210")
  * @param timestamp - When the call started
  * @returns LMS call data if match found, null otherwise
@@ -23,6 +26,33 @@ export async function checkLMSCall(
     console.log('[LMS] Integration disabled');
     return null;
   }
+
+  // 🚀 NEW: First check for proactive LMS context
+  const lmsContext = checkLMSContext(phoneNumber);
+  if (lmsContext) {
+    console.log('🎯 [LMS CONTEXT] Found proactive LMS context!', {
+      phoneNumber,
+      lmsCallId: lmsContext.lmsCallId,
+      customerName: lmsContext.customerName,
+      customerId: lmsContext.customerId,
+      leadId: lmsContext.leadId
+    });
+    
+    // Convert context to LMSCallData format
+    const lmsData: LMSCallData = {
+      isLMSCall: true,
+      callLogId: lmsContext.lmsCallId,
+      leadId: lmsContext.leadId || lmsContext.customerId,
+      leadName: lmsContext.customerName,
+      leadPhone: phoneNumber,
+      context: lmsContext
+    };
+    
+    // Don't clear context yet - wait until recording is processed
+    return lmsData;
+  }
+  
+  console.log('🔍 [LMS] No proactive context found, trying match call API...');
 
   try {
     const requestPayload = {
@@ -102,7 +132,8 @@ export async function updateLMSRecording(
   callLogId: string,
   recordingUrl: string,
   duration: number,
-  recordingAppCallId?: string
+  recordingAppCallId?: string,
+  phoneNumber?: string // Add phone number to clear context
 ): Promise<boolean> {
   if (!LMS_CONFIG.enabled) {
     console.log('[LMS] Integration disabled');
@@ -165,6 +196,13 @@ export async function updateLMSRecording(
       console.log('🎉 [LMS SUCCESS] Recording URL sent to LMS successfully!');
       console.log('   ✅ LMS can now play the recording');
       console.log('   ✅ Sales team will see recording in lead details');
+      
+      // Clear the LMS context since recording was successfully processed
+      if (phoneNumber) {
+        clearLMSContext(phoneNumber);
+        console.log('🧹 [LMS] Cleared call context for:', phoneNumber);
+      }
+      
       return true;
     } else {
       console.error('❌ [LMS FAILED] LMS rejected the recording update');

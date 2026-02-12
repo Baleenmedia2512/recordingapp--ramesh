@@ -13,6 +13,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { sendRecordingToLMS, getLMSCallInfo, clearLMSCallInfo } from './googleDriveService';
+import { updateLMSRecording } from './lmsApi';
+import { checkLMSContext, clearLMSContext } from './lmsHttpServer';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/env';
 import { Capacitor } from '@capacitor/core';
 import { isOnline, canReach } from '@/lib/network';
@@ -317,12 +319,14 @@ export async function uploadAndSyncToLMS(
   file: File | Blob,
   fileName: string,
   duration: number,
-  originalFilePath?: string
+  originalFilePath?: string,
+  phoneNumber?: string
 ): Promise<{ success: boolean; sentToLMS: boolean; url?: string }> {
   console.log('📋 uploadAndSyncToLMS called with:');
   console.log('   fileName:', fileName);
   console.log('   duration:', duration);
   console.log('   originalFilePath:', originalFilePath);
+  console.log('   phoneNumber:', phoneNumber);
   console.log('   blob size:', file.size, 'bytes');
   
   try {
@@ -341,9 +345,48 @@ export async function uploadAndSyncToLMS(
 
     console.log('✅ Upload successful! URL:', uploadResult.publicUrl);
 
-    // 2. Check if this was an LMS call
-    console.log('2️⃣ Checking for LMS call info...');
-    const lmsCallInfo = getLMSCallInfo();
+    // 2️⃣ NEW: Check for proactive LMS context first
+    let lmsCallInfo = null;
+    let lmsContext = null;
+    
+    if (phoneNumber) {
+      lmsContext = checkLMSContext(phoneNumber);
+      console.log('2️⃣ Checking for LMS call info...');
+      console.log('🔍 [STORAGE] Retrieving LMS call info from localStorage');
+    }
+    
+    if (lmsContext) {
+      console.log('🏢 Found LMS context from proactive integration!', {
+        callId: lmsContext.lmsCallId,
+        customer: lmsContext.customerName,
+        phone: lmsContext.phoneNumber
+      });
+      
+      // Send directly to LMS using new approach
+      const sentToLMS = await updateLMSRecording(
+        lmsContext.lmsCallId,
+        uploadResult.publicUrl,
+        duration,
+        fileName, // recordingAppCallId
+        phoneNumber // for context cleanup
+      );
+      
+      if (sentToLMS) {
+        console.log('✅ LMS updated with recording URL via proactive integration!');
+      } else {
+        console.error('❌ Failed to update LMS via proactive integration');
+      }
+      
+      return {
+        success: true,
+        sentToLMS,
+        url: uploadResult.publicUrl,
+      };
+    }
+    
+    // 3️⃣ FALLBACK: Check legacy LMS call info
+    console.log('   ℹ️ No LMS call data found in localStorage');
+    lmsCallInfo = getLMSCallInfo();
 
     if (!lmsCallInfo) {
       console.log('ℹ️ Not an LMS call - recording uploaded to Supabase only');
@@ -354,8 +397,8 @@ export async function uploadAndSyncToLMS(
       };
     }
 
-    // 3. Send to LMS
-    console.log('3️⃣ Sending recording to LMS...');
+    // 4️⃣ Legacy LMS integration (fallback)
+    console.log('4️⃣ Sending recording to LMS (legacy)...');
     console.log('   CallLog ID:', lmsCallInfo.callLogId);
     console.log('   Lead:', lmsCallInfo.leadName);
     console.log('   Recording URL:', uploadResult.publicUrl);
