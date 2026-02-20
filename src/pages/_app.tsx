@@ -7,6 +7,8 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { testLMSConnection } from '@/services/lmsApi';
 import { startQueueManager } from '@/services/uploadQueueManager';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { CallMonitor } from '@/plugins/CallMonitorPlugin';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/config/env';
 
 export default function App({ Component, pageProps }: AppProps) {
   // Monitor network status (triggers upload retry on reconnect)
@@ -27,6 +29,32 @@ export default function App({ Component, pageProps }: AppProps) {
           window.history.back();
         }
       });
+      
+      // Configure native auto-upload (uploads recordings even when app is in background)
+      // This allows recording upload without returning to Call Monitor app
+      if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+        CallMonitor.configureAutoUpload({
+          supabaseUrl: SUPABASE_URL,
+          supabaseKey: SUPABASE_ANON_KEY,
+          enabled: true,
+          bucketName: 'recordings',
+          storagePath: 'call-recordings'
+        }).then((result) => {
+          console.log('✅ Native auto-upload configured:', result.message);
+        }).catch((error) => {
+          console.warn('⚠️ Failed to configure native auto-upload:', error);
+        });
+        
+        // Listen for auto-upload status events
+        CallMonitor.addListener('autoUploadStatus', (data) => {
+          console.log('📤 Auto-upload status:', data.status);
+          if (data.status === 'success') {
+            console.log('✅ Recording auto-uploaded:', data.url);
+          } else if (data.status === 'failed' || data.status === 'error') {
+            console.warn('⚠️ Auto-upload failed:', data.message);
+          }
+        });
+      }
     }
 
     // Test LMS connection on app startup

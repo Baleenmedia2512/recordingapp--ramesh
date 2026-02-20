@@ -8,7 +8,7 @@ export const LMS_CONFIG = {
   baseUrl: process.env.NEXT_PUBLIC_LMS_URL || 'http://localhost:3000',
   
   // API key for authentication (must match LMS .env)
-  apiKey: process.env.NEXT_PUBLIC_LMS_API_KEY || 'your-secret-key-here-change-this-123456',
+  apiKey: process.env.NEXT_PUBLIC_LMS_API_KEY || 'CallMonitor-LMS-SecretKey-2026-Feb-Random-789xyz',
   
   // API endpoints
   endpoints: {

@@ -37,7 +37,7 @@ interface LMSUpdateRecordingResponse {
 }
 
 const LMS_BASE_URL = Deno.env.get('LMS_BASE_URL') || 'https://e2wleadmanager.vercel.app';
-const LMS_API_KEY = Deno.env.get('LMS_API_KEY') || 'CallMonitor-LMS-SecretKey-2026-Feb-Random-789xyz';
+const LMS_API_KEY = Deno.env.get('CALL_MONITOR_API_KEY') || Deno.env.get('LMS_API_KEY') || 'CallMonitor-LMS-SecretKey-2026-Feb-Random-789xyz';
 
 async function matchCallWithLMS(phoneNumber: string, timestamp: string): Promise<LMSMatchCallResponse | null> {
   try {

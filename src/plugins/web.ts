@@ -177,4 +177,38 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
       osVersion: navigator.userAgent,
     };
   }
+
+  async configureAutoUpload(options: {
+    supabaseUrl: string;
+    supabaseKey: string;
+    enabled?: boolean;
+    bucketName?: string;
+    storagePath?: string;
+  }): Promise<{
+    success: boolean;
+    enabled: boolean;
+    message: string;
+  }> {
+    console.log('Web platform: configureAutoUpload not supported (native feature only)', options);
+    return {
+      success: true,
+      enabled: false,
+      message: 'Auto-upload is only supported on native platforms (Android)',
+    };
+  }
+
+  async getAutoUploadConfig(): Promise<{
+    enabled: boolean;
+    configured: boolean;
+    bucketName: string;
+    storagePath: string;
+  }> {
+    console.log('Web platform: getAutoUploadConfig not supported');
+    return {
+      enabled: false,
+      configured: false,
+      bucketName: 'recordings',
+      storagePath: 'call-recordings',
+    };
+  }
 }

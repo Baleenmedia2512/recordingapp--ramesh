@@ -399,6 +399,23 @@ export const useCallLogs = () => {
                 console.log('⏰ Inside setTimeout, starting upload process...');
                 console.log('Call ended, force refreshing to get new recording...');
                 
+                // On native platforms (Android/iOS), WorkManager handles uploads automatically
+                // Skip JavaScript upload to prevent duplicate uploads
+                const isNativePlatform = Capacitor.isNativePlatform();
+                if (isNativePlatform) {
+                  try {
+                    const autoUploadConfig = await CallMonitor.getAutoUploadConfig();
+                    if (autoUploadConfig.enabled && autoUploadConfig.configured) {
+                      console.log('✅ Native auto-upload is enabled - WorkManager will handle upload');
+                      console.log('⏭️ Skipping JavaScript upload to prevent duplicate');
+                      processingCallEnd.current = false;
+                      return;
+                    }
+                  } catch (error) {
+                    console.warn('⚠️ Could not check auto-upload config, proceeding with JS upload:', error);
+                  }
+                }
+                
                 // Refresh call logs first to get the new recording
                 await fetchCallLogs(filters, true, true);
                 

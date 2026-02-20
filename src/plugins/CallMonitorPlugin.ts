@@ -100,6 +100,32 @@ export interface CallMonitorPlugin {
     fileSize?: number;
   }>;
   
+  /**
+   * Configure native auto-upload (uploads recordings even when app is in background)
+   * Call this on app startup with Supabase credentials
+   */
+  configureAutoUpload(options: {
+    supabaseUrl: string;
+    supabaseKey: string;
+    enabled?: boolean;
+    bucketName?: string;
+    storagePath?: string;
+  }): Promise<{
+    success: boolean;
+    enabled: boolean;
+    message: string;
+  }>;
+  
+  /**
+   * Get current auto-upload configuration status
+   */
+  getAutoUploadConfig(): Promise<{
+    enabled: boolean;
+    configured: boolean;
+    bucketName: string;
+    storagePath: string;
+  }>;
+  
   // Sync methods
   syncCallLogs(options: { logs: any[] }): Promise<{ success: boolean }>;
   
@@ -113,7 +139,7 @@ export interface CallMonitorPlugin {
   
   // Event listeners
   addListener(
-    eventName: 'callLogChanged' | 'phoneStateChanged',
+    eventName: 'callLogChanged' | 'phoneStateChanged' | 'autoUploadStatus',
     listenerFunc: (data: any) => void
   ): Promise<any>;
   
