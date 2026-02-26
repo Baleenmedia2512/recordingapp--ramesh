@@ -86,3 +86,45 @@ export interface SyncStatus {
   pendingCount: number;
   error?: string;
 }
+
+export interface LeadMetadata {
+  id: string;
+  user_id: string;
+  phone_number: string;
+  contact_name: string;
+  company?: string;
+  email?: string;
+  designation?: string;
+  notes?: string;
+  is_synced_to_lms: boolean;
+  lms_lead_id?: string;
+  is_in_contacts: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PhoneNumberLookupResult {
+  phoneNumber: string;
+  foundInContacts: boolean;
+  foundInLeads: boolean;
+  foundInLMS: boolean;
+  contactName?: string;
+  leadData?: LeadMetadata;
+  lmsData?: {
+    leadId: string;
+    leadName: string;
+    callLogId?: string;
+  };
+}
+
+export interface AddLeadFormData {
+  phoneNumber: string;
+  contactName: string;
+  company?: string;
+  email?: string;
+  designation?: string;
+  notes?: string;
+  addToContacts: boolean;
+  addToLeads: boolean;
+  syncToLMS: boolean;
+}

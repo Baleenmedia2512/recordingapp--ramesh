@@ -3,7 +3,10 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useLMSIntegration } from '@/hooks/useLMSIntegration';
 import Dashboard from '@/components/Dashboard';
 import PermissionsManager from '@/components/PermissionsManager';
+import AddLeadModal from '@/components/AddLeadModal';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
+import { CallMonitor } from '@/plugins/CallMonitorPlugin';
 
 export default function Home() {
   const { 
@@ -17,6 +20,9 @@ export default function Home() {
   const { lmsStatus, initializeLMSHttpServer } = useLMSIntegration();
   
   const [appReady, setAppReady] = useState(false);
+  const [showAddLead, setShowAddLead] = useState(false);
+  const [leadPhoneNumber, setLeadPhoneNumber] = useState<string>('');
+  const [leadActionType, setLeadActionType] = useState<string>('');
 
   // Track app initialization time for performance and initialize LMS
   useEffect(() => {
@@ -35,6 +41,44 @@ export default function Home() {
       setAppReady(true);
     }
   }, [isChecking, initializeLMSHttpServer]);
+
+  // Check for pending lead notification data when app opens
+  const checkPendingLeadNotification = async () => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    try {
+      const result = await CallMonitor.checkPendingLeadNotification();
+      
+      if (result.hasPending && result.phoneNumber) {
+        console.log('📝 Opening AddLeadForm for:', result.phoneNumber);
+        setLeadPhoneNumber(result.phoneNumber);
+        setLeadActionType(result.actionType || 'ADD_BOTH');
+        setShowAddLead(true);
+      }
+    } catch (e) {
+      console.error('Error checking pending notification:', e);
+    }
+  };
+
+  // Listen for app state changes
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    // Check on initial load
+    checkPendingLeadNotification();
+
+    // Check when app comes to foreground
+    const stateListener = CapacitorApp.addListener('appStateChange', (state) => {
+      if (state.isActive) {
+        console.log('📱 App became active, checking for pending notification...');
+        checkPendingLeadNotification();
+      }
+    });
+
+    return () => {
+      stateListener.then(listener => listener.remove());
+    };
+  }, []);
 
   // Get platform-specific info for header
   const getPlatformBadge = () => {
@@ -176,6 +220,19 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* Add Lead Modal */}
+      {showAddLead && (
+        <AddLeadModal
+          phoneNumber={leadPhoneNumber}
+          actionType={leadActionType}
+          onClose={() => {
+            setShowAddLead(false);
+            setLeadPhoneNumber('');
+            setLeadActionType('');
+          }}
+        />
+      )}
     </div>
   );
 }

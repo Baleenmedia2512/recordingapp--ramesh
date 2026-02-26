@@ -137,6 +137,24 @@ export interface CallMonitorPlugin {
     osVersion: string;
   }>;
   
+  // Lead management methods
+  checkPendingLeadNotification(): Promise<{
+    hasPending: boolean;
+    phoneNumber?: string;
+    actionType?: string;
+    timestamp?: number;
+  }>;
+  
+  addContact(options: {
+    name: string;
+    phoneNumber: string;
+    email?: string;
+    company?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+  }>;
+  
   // Event listeners
   addListener(
     eventName: 'callLogChanged' | 'phoneStateChanged' | 'autoUploadStatus',

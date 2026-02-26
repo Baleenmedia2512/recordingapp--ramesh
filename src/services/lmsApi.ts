@@ -54,6 +54,15 @@ export async function checkLMSCall(
   
   console.log('🔍 [LMS] No proactive context found, trying match call API...');
 
+  // Skip direct LMS API call if using edge functions (default for mobile)
+  // The native UploadWorker handles LMS sync via edge function to avoid CORS
+  if (LMS_CONFIG.useEdgeFunction) {
+    console.log('ℹ️ [LMS] Edge function mode enabled - skipping JavaScript LMS check');
+    console.log('   Native upload worker will handle LMS sync via edge function');
+    console.log('   This avoids CORS issues from mobile WebView');
+    return null;
+  }
+
   try {
     const requestPayload = {
       phone: phoneNumber,
@@ -61,11 +70,12 @@ export async function checkLMSCall(
       apiKey: LMS_CONFIG.apiKey?.substring(0, 10) + '...', // Hide full key in logs
     };
     
-    console.log('🔔 [LMS TRIGGER] Match Call API Called');
+    console.log('🔔 [LMS TRIGGER] Match Call API Called (Direct Mode)');
     console.log('   📞 Phone:', phoneNumber);
     console.log('   ⏰ Timestamp:', timestamp.toISOString());
     console.log('   🌐 Endpoint:', `${LMS_CONFIG.baseUrl}${LMS_CONFIG.endpoints.matchCall}`);
     console.log('   📦 Payload:', JSON.stringify(requestPayload, null, 2));
+    console.warn('   ⚠️ Direct mode may face CORS issues on mobile - consider enabling useEdgeFunction');
     
     const response = await fetch(
       `${LMS_CONFIG.baseUrl}${LMS_CONFIG.endpoints.matchCall}`,

@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useCallLogs } from '@/hooks/useCallLogs';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { useLeadManagement } from '@/hooks/useLeadManagement';
 import { CallLog, CallType } from '@/types';
 import CallLogItem from './CallLogItem';
 import CallLogFilters from './CallLogFilters';
 import AudioPlayer from './AudioPlayer';
+import AddLeadForm from './AddLeadForm';
 
 // View mode type
 type ViewMode = 'list' | 'table';
@@ -21,6 +23,14 @@ const Dashboard: React.FC = () => {
     isSlowLoad 
   } = useCallLogs();
   const { play } = useAudioPlayer();
+  const {
+    showForm,
+    lookupResult,
+    currentPhoneNumber,
+    isSubmitting,
+    handleFormSubmit,
+    handleFormCancel,
+  } = useLeadManagement();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
   const handlePlayRecording = (log: CallLog) => {
@@ -363,6 +373,17 @@ const Dashboard: React.FC = () => {
       </div>
 
       <AudioPlayer />
+      
+      {/* Add Lead Form Modal */}
+      {showForm && lookupResult && currentPhoneNumber && (
+        <AddLeadForm
+          phoneNumber={currentPhoneNumber}
+          lookupResult={lookupResult}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
+          isSubmitting={isSubmitting}
+        />
+      )}
     </div>
   );
 };

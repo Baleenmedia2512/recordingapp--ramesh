@@ -1,0 +1,291 @@
+/**
+ * Add Lead Modal Component
+ * Simplified form for adding leads from notification clicks
+ */
+
+import React, { useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+
+interface AddLeadModalProps {
+  phoneNumber: string;
+  actionType: string;
+  onClose: () => void;
+}
+
+interface FormData {
+  name: string;
+  company: string;
+  email: string;
+  designation: string;
+  notes: string;
+}
+
+const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, onClose }) => {
+  const [formData, setFormData] = useState<FormData>({
+    name: '',
+    company: '',
+    email: '',
+    designation: '',
+    notes: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string>('');
+
+  const handleChange = (field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const addToAndroidContacts = async () => {
+    if (!Capacitor.isNativePlatform()) return true;
+
+    try {
+      // Call native plugin to add contact (uses Android ContactsContract API)
+      const { CallMonitor } = await import('@/plugins/CallMonitorPlugin');
+      await CallMonitor.addContact({
+        name: formData.name,
+        phoneNumber: phoneNumber,
+        email: formData.email || '',
+        company: formData.company || '',
+      });
+      
+      console.log('✅ Contact saved to Android');
+      return true;
+    } catch (e) {
+      console.error('❌ Failed to save contact:', e);
+      // Don't fail the whole operation if contacts fail
+      return false;
+    }
+  };
+
+  const saveToLeadsMetadata = async () => {
+    try {
+      const response = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: phoneNumber,
+          contact_name: formData.name,
+          company: formData.company,
+          email: formData.email,
+          designation: formData.designation,
+          notes: formData.notes,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save to leads_metadata');
+      }
+
+      console.log('✅ Lead saved to database');
+      return true;
+    } catch (e) {
+      console.error('❌ Failed to save lead:', e);
+      throw e;
+    }
+  };
+
+  const syncToLMS = async () => {
+    try {
+      const SUPABASE_URL = 'https://wkwrrdcjknvupwsfdjtd.supabase.co';
+      const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indrd3JyZGNqa252dXB3c2ZkanRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NDI2OTIsImV4cCI6MjA4MzQxODY5Mn0.nMYFs8RtopRXN5MzDHfsMIiFoTbwTloACdgpIWk3UgA';
+      
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-lms-lead`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone: phoneNumber,
+          leadName: formData.name,
+          company: formData.company,
+          email: formData.email,
+          designation: formData.designation,
+          notes: formData.notes,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to sync to LMS');
+      }
+
+      console.log('✅ Lead synced to LMS');
+      return true;
+    } catch (e) {
+      console.error('❌ Failed to sync to LMS:', e);
+      // Don't fail if LMS sync fails
+      return false;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+
+    setIsSaving(true);
+    setError('');
+
+    try {
+      // Perform actions based on actionType
+      if (actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT') {
+        await addToAndroidContacts();
+      }
+
+      if (actionType === 'ADD_BOTH' || actionType === 'ADD_LMS') {
+        await saveToLeadsMetadata();
+        await syncToLMS();
+      }
+
+      // Success!
+      alert('✅ Lead added successfully!');
+      onClose();
+    } catch (err) {
+      setError('Failed to save lead. Please try again.');
+      console.error('Save error:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Add New Lead</h2>
+              <p className="text-sm text-gray-600 mt-1">📞 {phoneNumber}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-3xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Action Info */}
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+            <p className="text-sm text-blue-800">
+              {actionType === 'ADD_BOTH' && '📱 Will save to: Phone Contacts + LMS Database'}
+              {actionType === 'ADD_CONTACT' && '📱 Will save to: Phone Contacts only'}
+              {actionType === 'ADD_LMS' && '🏢 Will save to: LMS Database only'}
+            </p>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded">
+              <p className="text-sm text-red-800">{error}</p>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => handleChange('name', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Enter contact name"
+                required
+                disabled={isSaving}
+              />
+            </div>
+
+            {/* Company */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Company
+              </label>
+              <input
+                type="text"
+                value={formData.company}
+                onChange={(e) => handleChange('company', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Company name"
+                disabled={isSaving}
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleChange('email', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="email@example.com"
+                disabled={isSaving}
+              />
+            </div>
+
+            {/* Designation */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Designation
+              </label>
+              <input
+                type="text"
+                value={formData.designation}
+                onChange={(e) => handleChange('designation', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Job title"
+                disabled={isSaving}
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => handleChange('notes', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Additional notes..."
+                disabled={isSaving}
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : 'Save Lead'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AddLeadModal;

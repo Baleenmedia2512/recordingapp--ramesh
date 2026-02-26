@@ -12,7 +12,11 @@ export const LMS_URL = process.env.NEXT_PUBLIC_LMS_URL;
 export const LMS_API_KEY = process.env.NEXT_PUBLIC_LMS_API_KEY;
 export const LMS_ENABLED = process.env.NEXT_PUBLIC_LMS_ENABLED === 'true';
 
+// Lead Management Feature Flag
+export const LEAD_MANAGEMENT_ENABLED = process.env.NEXT_PUBLIC_LEAD_MANAGEMENT_ENABLED !== 'false'; // Enabled by default
+
 // Debug logging
 console.log('🔍 [env.ts] Environment config loaded');
 console.log('🔍 [env.ts] Supabase URL:', SUPABASE_URL);
 console.log('🔍 [env.ts] Supabase Key:', SUPABASE_ANON_KEY ? `${SUPABASE_ANON_KEY.substring(0, 20)}...` : 'MISSING');
+console.log('🔍 [env.ts] Lead Management:', LEAD_MANAGEMENT_ENABLED ? 'ENABLED' : 'DISABLED');

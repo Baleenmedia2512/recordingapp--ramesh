@@ -211,4 +211,32 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
       storagePath: 'call-recordings',
     };
   }
+
+  async checkPendingLeadNotification(): Promise<{
+    hasPending: boolean;
+    phoneNumber?: string;
+    actionType?: string;
+    timestamp?: number;
+  }> {
+    console.log('Web platform: checkPendingLeadNotification not supported');
+    return {
+      hasPending: false,
+    };
+  }
+
+  async addContact(options: {
+    name: string;
+    phoneNumber: string;
+    email?: string;
+    company?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    console.log('Web platform: addContact not supported', options);
+    return {
+      success: false,
+      message: 'Adding contacts is only supported on native platforms',
+    };
+  }
 }

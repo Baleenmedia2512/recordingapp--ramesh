@@ -3,10 +3,13 @@ import { useStore } from '@/store';
 import { callLogApi } from '@/lib/api';
 import { DashboardFilters, CallLog } from '@/types';
 import { isMockMode } from '@/lib/supabase';
+import { LEAD_MANAGEMENT_ENABLED } from '@/config/env';
 import { Capacitor } from '@capacitor/core';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
 import { uploadAndSyncToLMS } from '@/services/supabaseUpload';
 import { handleOutgoingCall } from '@/services/googleDriveService';
+import { lookupPhoneNumber } from '@/services/phoneNumberLookup';
+import { showLeadNotification } from '@/services/leadNotificationService';
 
 // Performance constants
 const LOAD_TIMEOUT_MS = 3000; // 3 second timeout for loading
@@ -384,19 +387,16 @@ export const useCallLogs = () => {
             }
             
             processingCallEnd.current = true;
-            console.log('⏰ Setting up setTimeout with delay:', CALL_END_REFRESH_DELAY_MS, 'ms');
-            console.log('🧪 TEST: Current time:', new Date().toLocaleTimeString());
+            console.log('⏰ Processing call end - will check lead after delay');
+            console.log('🧪 Current time:', new Date().toLocaleTimeString());
             
-            // Test setTimeout immediately to verify it works
-            setTimeout(() => {
-              console.log('🧪 TEST TIMEOUT FIRED AFTER 100ms!');
-            }, 100);
-            
-            // Wait a moment for the call log and recording to be written
-            const timeoutId = setTimeout(async () => {
+            // Use Promise-based delay instead of setTimeout to avoid event listener issues
+            (async () => {
               try {
-                console.log('⏰⏰⏰ SETTIMEOUT CALLBACK FIRED! ⏰⏰⏰');
-                console.log('⏰ Inside setTimeout, starting upload process...');
+                console.log('⏰ Waiting', CALL_END_REFRESH_DELAY_MS, 'ms for call log to be written...');
+                await new Promise(resolve => setTimeout(resolve, CALL_END_REFRESH_DELAY_MS));
+                console.log('⏰⏰⏰ DELAY COMPLETE! Starting lead check...');
+                console.log('⏰ Inside delay callback, starting lead check process...');
                 console.log('Call ended, force refreshing to get new recording...');
                 
                 // On native platforms (Android/iOS), WorkManager handles uploads automatically
@@ -408,6 +408,52 @@ export const useCallLogs = () => {
                     if (autoUploadConfig.enabled && autoUploadConfig.configured) {
                       console.log('✅ Native auto-upload is enabled - WorkManager will handle upload');
                       console.log('⏭️ Skipping JavaScript upload to prevent duplicate');
+                      
+                      // ✨ IMPORTANT: Check phone number and show notification even when native upload handles the file
+                      if (LEAD_MANAGEMENT_ENABLED) {
+                        try {
+                          console.log('🔍 [Lead Check] Checking phone number after native upload...');
+                          
+                          // Refresh to get latest call log
+                          await fetchCallLogs(filters, true, true);
+                          const latestLog = callLogsRef.current?.[0];
+                          
+                          console.log('🔍 [Lead Check] DEBUG - user?.id:', user?.id);
+                          console.log('🔍 [Lead Check] DEBUG - latestLog?.phone_number:', latestLog?.phone_number);
+                          console.log('🔍 [Lead Check] DEBUG - latestLog:', latestLog);
+                          
+                          if (latestLog?.phone_number) {
+                            // Work with or without user authentication
+                            const lookupResult = await lookupPhoneNumber(latestLog.phone_number, user?.id);
+                            console.log('📋 [Lead Check] Lookup result:', {
+                              phone: latestLog.phone_number,
+                              foundInContacts: lookupResult.foundInContacts,
+                              foundInLeads: lookupResult.foundInLeads,
+                              foundInLMS: lookupResult.foundInLMS
+                            });
+                            
+                            // Add delay to prevent permission conflict (Android needs time to clean up contacts permission UI)
+                            console.log('⏳ [Lead Check] Waiting 800ms before notification (prevent permission conflict)...');
+                            await new Promise(resolve => setTimeout(resolve, 800));
+                            
+                            // Show notification for ALL cases (new lead, existing lead, partial match, etc.)
+                            console.log('📢 [Lead Check] Showing notification for phone:', latestLog.phone_number);
+                            showLeadNotification(lookupResult, (action) => {
+                              console.log('🔔 [Lead Check] User clicked notification action:', action);
+                              // Dashboard component handles the action via useLeadManagement hook
+                            });
+                          } else {
+                            console.warn('⚠️ [Lead Check] Cannot check lead - missing phone number');
+                            console.warn('   latestLog?.phone_number:', latestLog?.phone_number);
+                          }
+                        } catch (leadCheckError) {
+                          console.error('⚠️ Error checking lead after native upload:', leadCheckError);
+                          // Don't fail if lead check fails
+                        }
+                      } else {
+                        console.log('🚫 [Lead Check] Feature disabled via feature flag');
+                      }
+                      
                       processingCallEnd.current = false;
                       return;
                     }
@@ -583,6 +629,41 @@ export const useCallLogs = () => {
                         } else {
                           console.log('⚠️ Uploaded to Supabase but not synced with LMS');
                         }
+                        
+                        // ✨ NEW: Check phone number after successful upload
+                        if (LEAD_MANAGEMENT_ENABLED) {
+                          try {
+                            console.log('🔍 [Lead Check] Checking phone number after call end...');
+                            if (latestLog.phone_number) {
+                              // Work with or without user authentication
+                              const lookupResult = await lookupPhoneNumber(latestLog.phone_number, user?.id);
+                              
+                              console.log('📋 [Lead Check] Lookup result:', {
+                                phone: latestLog.phone_number,
+                                foundInContacts: lookupResult.foundInContacts,
+                                foundInLeads: lookupResult.foundInLeads,
+                                foundInLMS: lookupResult.foundInLMS
+                              });
+                              
+                              // Add delay to prevent permission conflict (Android needs time to clean up contacts permission UI)
+                              console.log('⏳ [Lead Check] Waiting 800ms before notification (prevent permission conflict)...');
+                              await new Promise(resolve => setTimeout(resolve, 800));
+                              
+                              // Show notification for ALL cases (new lead, existing lead, partial match, etc.)
+                              console.log('📢 [Lead Check] Showing notification for phone:', latestLog.phone_number);
+                              showLeadNotification(lookupResult, (action) => {
+                                console.log('🔔 [Lead Check] User clicked notification action:', action);
+                                // Dashboard component handles the action via useLeadManagement hook
+                              });
+                            }
+                          } catch (leadCheckError) {
+                            console.error('⚠️ Error checking lead after upload:', leadCheckError);
+                            // Don't fail the upload if lead check fails
+                          }
+                        } else {
+                          console.log('🚫 [Lead Check] Feature disabled via feature flag');
+                        }
+                        
                       } catch (dbError) {
                         console.error('❌ Failed to save recording URL to database:', dbError);
                         // Still mark as uploaded to prevent retries
@@ -614,19 +695,17 @@ export const useCallLogs = () => {
               
               // Start upload with retry
               tryUploadWithRetry();
-              } catch (timeoutError: any) {
-                console.error('❌❌❌ ERROR IN SETTIMEOUT CALLBACK:', timeoutError);
-                console.error('Error stack:', timeoutError?.stack);
+              } catch (error: any) {
+                console.error('❌❌❌ ERROR IN DELAY CALLBACK:', error);
+                console.error('Error stack:', error?.stack);
               } finally {
                 // Reset processing flag after upload attempt completes
                 processingCallEnd.current = false;
-                activeTimeoutId.current = null;
-                console.log('✅ Upload process completed, ready for next call');
+                console.log('✅ Lead check/upload process completed, ready for next call');
               }
-            }, CALL_END_REFRESH_DELAY_MS);
+            })(); // Immediately invoke the async function
             
-            activeTimeoutId.current = timeoutId as unknown as number;
-            console.log('✅ setTimeout scheduled with ID:', timeoutId);
+            console.log('✅ Async lead check scheduled');
           }
         });
         
