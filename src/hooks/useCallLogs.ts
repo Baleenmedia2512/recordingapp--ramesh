@@ -98,6 +98,7 @@ export const useCallLogs = () => {
   const loadStartTimeRef = useRef<number>(0);
   const uploadingRecordings = useRef<Set<string>>(new Set()); // Track uploads in progress to prevent duplicates
   const uploadedRecordings = useRef<Set<string>>(new Set()); // Track completed uploads
+  const lookupCache = useRef<Map<string, any>>(new Map()); // Cache phone lookup results during call
   const processingCallEnd = useRef<boolean>(false); // Prevent duplicate call_ended processing
   const activeTimeoutId = useRef<number | null>(null); // Track active setTimeout ID
 
@@ -351,7 +352,7 @@ export const useCallLogs = () => {
               (data as any).state === 'OFFHOOK' || 
               data.type === 'call_started') {
             console.log('📞 ========================================');
-            console.log('📞 [OUTGOING CALL DETECTED]');
+            console.log('📞 [CALL STARTED DETECTED]');
             console.log('   Phone:', (data as any).phoneNumber);
             console.log('   Type:', data.type);
             console.log('📞 ========================================');
@@ -361,11 +362,38 @@ export const useCallLogs = () => {
               if (phoneNumber) {
                 console.log('🔍 Checking if this call is from LMS...');
                 await handleOutgoingCall(phoneNumber, new Date());
+                
+                // ============================================================
+                // 🚀 PRE-FETCH: Look up phone number DURING call
+                // ============================================================
+                if (LEAD_MANAGEMENT_ENABLED) {
+                  console.log('🔍 [PRE-FETCH] Starting phone lookup DURING call for:', phoneNumber);
+                  console.log('⏰ [PRE-FETCH] This will take 5-8 seconds...');
+                  
+                  // Run lookup in background and cache result
+                  lookupPhoneNumber(phoneNumber, user?.id).then((lookupResult) => {
+                    console.log('✅ [PRE-FETCH] Lookup completed and cached!');
+                    console.log('📋 [PRE-FETCH] Result:', {
+                      phone: phoneNumber,
+                      foundInContacts: lookupResult.foundInContacts,
+                      foundInLeads: lookupResult.foundInLeads,
+                      foundInLMS: lookupResult.foundInLMS
+                    });
+                    
+                    // Cache the result for instant notification on call end
+                    lookupCache.current.set(phoneNumber, lookupResult);
+                    console.log('💾 [PRE-FETCH] Cached result. On call end, notification will show INSTANTLY!');
+                  }).catch((error) => {
+                    console.error('❌ [PRE-FETCH] Lookup failed:', error);
+                    // Don't cache errors - will retry on call_ended
+                  });
+                }
+                // ============================================================
               } else {
                 console.warn('⚠️ No phone number in call data');
               }
             } catch (error) {
-              console.error('❌ Error handling outgoing call for LMS:', error);
+              console.error('❌ Error handling call start:', error);
             }
           }
           // ============================================================
@@ -373,30 +401,192 @@ export const useCallLogs = () => {
           if (data.type === 'call_ended') {
             console.log('✅ ENTERED call_ended block!');
             
-            // Prevent duplicate processing if event fires multiple times
-            if (processingCallEnd.current) {
-              console.log('⚠️ Already processing call_ended event, skipping duplicate');
+            // Check if this event has a phone number
+            const phoneNumber = (data as any).phoneNumber || (data as any).number;
+            console.log('🔍 Event data:', JSON.stringify(data));
+            console.log('📱 Phone number from event:', phoneNumber);
+            
+            // Allow events WITH phone numbers even if already processing
+            // (Android sends updated event with phone number 2s later)
+            if (processingCallEnd.current && !phoneNumber) {
+              console.log('⚠️ Already processing call_ended and no phone number in this event, skipping');
               return;
             }
             
-            // Cancel any existing timeout
-            if (activeTimeoutId.current !== null) {
-              console.log('⚠️ Cancelling existing timeout:', activeTimeoutId.current);
-              clearTimeout(activeTimeoutId.current);
-              activeTimeoutId.current = null;
+            if (processingCallEnd.current && phoneNumber) {
+              console.log('✅ Already processing BUT this event HAS phone number - processing it!');
+              // Cancel the delayed lookup since we now have the phone number
+              if (activeTimeoutId.current !== null) {
+                console.log('✅ Cancelling delayed lookup, we have phone number now!');
+                clearTimeout(activeTimeoutId.current);
+                activeTimeoutId.current = null;
+              }
             }
             
-            processingCallEnd.current = true;
-            console.log('⏰ Processing call end - will check lead after delay');
+            if (!processingCallEnd.current) {
+              processingCallEnd.current = true;
+              console.log('⏰ Set processingCallEnd = true');
+            }
+            console.log('⏰ Processing call end');
             console.log('🧪 Current time:', new Date().toLocaleTimeString());
             
-            // Use Promise-based delay instead of setTimeout to avoid event listener issues
+            // ============================================================
+            // ✅ INSTANT NOTIFICATION: Show lead notification immediately
+            // ============================================================
+            
+            if (LEAD_MANAGEMENT_ENABLED) {
+              if (phoneNumber) {
+                // Case 1: Phone number available - check cache first
+                (async () => {
+                  try {
+                    // Check if we already looked up this number during the call
+                    const cachedResult = lookupCache.current.get(phoneNumber);
+                    
+                    if (cachedResult) {
+                      // ✅ INSTANT: Use cached result from call_started
+                      console.log('⚡ [INSTANT] Using CACHED lookup result!');
+                      console.log('📋 [INSTANT] Cached result:', {
+                        phone: phoneNumber,
+                        foundInContacts: cachedResult.foundInContacts,
+                        foundInLeads: cachedResult.foundInLeads,
+                        foundInLMS: cachedResult.foundInLMS
+                      });
+                      console.log('🔔 [INSTANT] About to call showLeadNotification with cached result...');
+                      console.log('🔔 [INSTANT] showLeadNotification function exists?', typeof showLeadNotification);
+                      
+                      try {
+                        const notifResult = await showLeadNotification(cachedResult, (action) => {
+                          console.log('🔔 [INSTANT] User clicked notification action:', action);
+                        });
+                        console.log('✅ [INSTANT] showLeadNotification returned (void):', notifResult);
+                        console.log('✅ [INSTANT] Notification shown in <100ms!');
+                      } catch (notifError: any) {
+                        console.error('❌ [INSTANT] showLeadNotification threw error:', notifError);
+                        console.error('❌ [INSTANT] Error details:', JSON.stringify(notifError));
+                        throw notifError; // Re-throw to outer catch
+                      }
+                      
+                      // Clear cache after use
+                      lookupCache.current.delete(phoneNumber);
+                    } else {
+                      // ⏳ FALLBACK: Not in cache, do lookup now (shouldn't happen often)
+                      console.log('⏳ [FALLBACK] No cached result, doing lookup now...');
+                      console.log('⏳ [FALLBACK] Calling lookupPhoneNumber for:', phoneNumber);
+                      
+                      try {
+                        const lookupResult = await lookupPhoneNumber(phoneNumber, user?.id);
+                        console.log('✅ [FALLBACK] lookupPhoneNumber returned successfully!');
+                        console.log('📋 [FALLBACK] Lookup result:', {
+                          phone: phoneNumber,
+                          foundInContacts: lookupResult.foundInContacts,
+                          foundInLeads: lookupResult.foundInLeads,
+                          foundInLMS: lookupResult.foundInLMS
+                        });
+                        console.log('🔔 [FALLBACK] About to call showLeadNotification...');
+                        
+                        try {
+                          const notifResult = await showLeadNotification(lookupResult, (action) => {
+                            console.log('🔔 [FALLBACK] User clicked notification action:', action);
+                          });
+                          console.log('✅ [FALLBACK] showLeadNotification returned (void):', notifResult);
+                          console.log('✅ [FALLBACK] Notification call completed!');
+                        } catch (notifError: any) {
+                          console.error('❌ [FALLBACK] showLeadNotification threw error:', notifError);
+                          console.error('❌ [FALLBACK] Error details:', JSON.stringify(notifError));
+                        }
+                      } catch (lookupError: any) {
+                        console.error('❌ [FALLBACK] lookupPhoneNumber threw error:', lookupError);
+                        console.error('❌ [FALLBACK] Error details:', JSON.stringify(lookupError));
+                      }
+                    }
+                  } catch (error) {
+                    console.error('❌ [INSTANT] Error showing notification:', error);
+                    console.error('❌ [INSTANT] Error details:', JSON.stringify(error));
+                  }
+                })();
+              } else {
+                // Case 2: Phone number NOT available - wait and get from call log
+                console.log('⏳ [DELAYED] No phone number in event, will get from call log after 3s...');
+                setTimeout(async () => {
+                  try {
+                    console.log('🔍 [DELAYED] Refreshing call logs to get phone number...');
+                    await fetchCallLogs(filters, true, true);
+                    const latestLog = callLogsRef.current?.[0];
+                    
+                    if (latestLog?.phone_number) {
+                      console.log('📢 [DELAYED] Found phone number:', latestLog.phone_number);
+                      
+                      // Check cache first
+                      const cachedResult = lookupCache.current.get(latestLog.phone_number);
+                      
+                      if (cachedResult) {
+                        console.log('⚡ [DELAYED] Using CACHED lookup result!');
+                        console.log('📋 [DELAYED] Cached result:', {
+                          phone: latestLog.phone_number,
+                          foundInContacts: cachedResult.foundInContacts,
+                          foundInLeads: cachedResult.foundInLeads,
+                          foundInLMS: cachedResult.foundInLMS
+                        });
+                        console.log('🔔 [DELAYED] Showing notification NOW...');
+                        await showLeadNotification(cachedResult, (action) => {
+                          console.log('🔔 [DELAYED] User clicked notification action:', action);
+                        });
+                        console.log('✅ [DELAYED] Notification shown from cache!');
+                        lookupCache.current.delete(latestLog.phone_number);
+                      } else {
+                        console.log('⏳ [DELAYED] Not in cache, doing lookup now...');
+                        console.log('⏳ [DELAYED] Calling lookupPhoneNumber for:', latestLog.phone_number);
+                        
+                        try {
+                          const lookupResult = await lookupPhoneNumber(latestLog.phone_number, user?.id);
+                          console.log('✅ [DELAYED] lookupPhoneNumber returned successfully!');
+                          console.log('📋 [DELAYED] Lookup result:', {
+                            phone: latestLog.phone_number,
+                            foundInContacts: lookupResult.foundInContacts,
+                            foundInLeads: lookupResult.foundInLeads,
+                            foundInLMS: lookupResult.foundInLMS
+                          });
+                          console.log('🔔 [DELAYED] About to call showLeadNotification...');
+                          console.log('🔔 [DELAYED] showLeadNotification function exists?', typeof showLeadNotification);
+                          
+                          try {
+                            const notifResult = await showLeadNotification(lookupResult, (action) => {
+                              console.log('🔔 [DELAYED] User clicked notification action:', action);
+                            });
+                            console.log('✅ [DELAYED] showLeadNotification returned (void):', notifResult);
+                            console.log('✅ [DELAYED] Notification shown successfully!');
+                          } catch (notifError: any) {
+                            console.error('❌ [DELAYED] showLeadNotification threw error:', notifError);
+                            console.error('❌ [DELAYED] Error message:', notifError?.message);
+                            console.error('❌ [DELAYED] Error stack:', notifError?.stack);
+                            console.error('❌ [DELAYED] Error JSON:', JSON.stringify(notifError));
+                          }
+                        } catch (lookupError: any) {
+                          console.error('❌ [DELAYED] lookupPhoneNumber threw error:', lookupError);
+                          console.error('❌ [DELAYED] Error message:', lookupError?.message);
+                          console.error('❌ [DELAYED] Error stack:', lookupError?.stack);
+                          console.error('❌ [DELAYED] Error JSON:', JSON.stringify(lookupError));
+                        }
+                      }
+                    } else {
+                      console.warn('⚠️ [DELAYED] Still no phone number found in call log');
+                    }
+                  } catch (error) {
+                    console.error('❌ [DELAYED] Error showing notification:', error);
+                  }
+                }, 3000); // Wait 3s for Android to write CallLog
+              }
+            } else {
+              console.log('🚫 [INSTANT] Lead notification skipped - feature disabled');
+            }
+            // ============================================================
+            
+            // Use Promise-based delay for background upload work
             (async () => {
               try {
                 console.log('⏰ Waiting', CALL_END_REFRESH_DELAY_MS, 'ms for call log to be written...');
                 await new Promise(resolve => setTimeout(resolve, CALL_END_REFRESH_DELAY_MS));
-                console.log('⏰⏰⏰ DELAY COMPLETE! Starting lead check...');
-                console.log('⏰ Inside delay callback, starting lead check process...');
+                console.log('⏰⏰⏰ DELAY COMPLETE! Starting background upload...');
                 console.log('Call ended, force refreshing to get new recording...');
                 
                 // On native platforms (Android/iOS), WorkManager handles uploads automatically
@@ -409,50 +599,10 @@ export const useCallLogs = () => {
                       console.log('✅ Native auto-upload is enabled - WorkManager will handle upload');
                       console.log('⏭️ Skipping JavaScript upload to prevent duplicate');
                       
-                      // ✨ IMPORTANT: Check phone number and show notification even when native upload handles the file
-                      if (LEAD_MANAGEMENT_ENABLED) {
-                        try {
-                          console.log('🔍 [Lead Check] Checking phone number after native upload...');
-                          
-                          // Refresh to get latest call log
-                          await fetchCallLogs(filters, true, true);
-                          const latestLog = callLogsRef.current?.[0];
-                          
-                          console.log('🔍 [Lead Check] DEBUG - user?.id:', user?.id);
-                          console.log('🔍 [Lead Check] DEBUG - latestLog?.phone_number:', latestLog?.phone_number);
-                          console.log('🔍 [Lead Check] DEBUG - latestLog:', latestLog);
-                          
-                          if (latestLog?.phone_number) {
-                            // Work with or without user authentication
-                            const lookupResult = await lookupPhoneNumber(latestLog.phone_number, user?.id);
-                            console.log('📋 [Lead Check] Lookup result:', {
-                              phone: latestLog.phone_number,
-                              foundInContacts: lookupResult.foundInContacts,
-                              foundInLeads: lookupResult.foundInLeads,
-                              foundInLMS: lookupResult.foundInLMS
-                            });
-                            
-                            // Add delay to prevent permission conflict (Android needs time to clean up contacts permission UI)
-                            console.log('⏳ [Lead Check] Waiting 800ms before notification (prevent permission conflict)...');
-                            await new Promise(resolve => setTimeout(resolve, 800));
-                            
-                            // Show notification for ALL cases (new lead, existing lead, partial match, etc.)
-                            console.log('📢 [Lead Check] Showing notification for phone:', latestLog.phone_number);
-                            showLeadNotification(lookupResult, (action) => {
-                              console.log('🔔 [Lead Check] User clicked notification action:', action);
-                              // Dashboard component handles the action via useLeadManagement hook
-                            });
-                          } else {
-                            console.warn('⚠️ [Lead Check] Cannot check lead - missing phone number');
-                            console.warn('   latestLog?.phone_number:', latestLog?.phone_number);
-                          }
-                        } catch (leadCheckError) {
-                          console.error('⚠️ Error checking lead after native upload:', leadCheckError);
-                          // Don't fail if lead check fails
-                        }
-                      } else {
-                        console.log('🚫 [Lead Check] Feature disabled via feature flag');
-                      }
+                      // ✨ BACKGROUND WORK: Refresh logs silently (notification already shown)
+                      console.log('🔄 [BACKGROUND] Refreshing call logs silently...');
+                      await fetchCallLogs(filters, true, true);
+                      console.log('✅ [BACKGROUND] Call logs refreshed');
                       
                       processingCallEnd.current = false;
                       return;
@@ -630,39 +780,8 @@ export const useCallLogs = () => {
                           console.log('⚠️ Uploaded to Supabase but not synced with LMS');
                         }
                         
-                        // ✨ NEW: Check phone number after successful upload
-                        if (LEAD_MANAGEMENT_ENABLED) {
-                          try {
-                            console.log('🔍 [Lead Check] Checking phone number after call end...');
-                            if (latestLog.phone_number) {
-                              // Work with or without user authentication
-                              const lookupResult = await lookupPhoneNumber(latestLog.phone_number, user?.id);
-                              
-                              console.log('📋 [Lead Check] Lookup result:', {
-                                phone: latestLog.phone_number,
-                                foundInContacts: lookupResult.foundInContacts,
-                                foundInLeads: lookupResult.foundInLeads,
-                                foundInLMS: lookupResult.foundInLMS
-                              });
-                              
-                              // Add delay to prevent permission conflict (Android needs time to clean up contacts permission UI)
-                              console.log('⏳ [Lead Check] Waiting 800ms before notification (prevent permission conflict)...');
-                              await new Promise(resolve => setTimeout(resolve, 800));
-                              
-                              // Show notification for ALL cases (new lead, existing lead, partial match, etc.)
-                              console.log('📢 [Lead Check] Showing notification for phone:', latestLog.phone_number);
-                              showLeadNotification(lookupResult, (action) => {
-                                console.log('🔔 [Lead Check] User clicked notification action:', action);
-                                // Dashboard component handles the action via useLeadManagement hook
-                              });
-                            }
-                          } catch (leadCheckError) {
-                            console.error('⚠️ Error checking lead after upload:', leadCheckError);
-                            // Don't fail the upload if lead check fails
-                          }
-                        } else {
-                          console.log('🚫 [Lead Check] Feature disabled via feature flag');
-                        }
+                        // ✅ BACKGROUND WORK: Upload completed silently (notification already shown)
+                        console.log('✅ [BACKGROUND] Upload and sync completed');
                         
                       } catch (dbError) {
                         console.error('❌ Failed to save recording URL to database:', dbError);

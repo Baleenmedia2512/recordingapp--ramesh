@@ -5,6 +5,8 @@
 
 import React, { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { createLead } from '@/services/leadsMetadataService';
+import { supabase } from '@/lib/supabase';
 
 interface AddLeadModalProps {
   phoneNumber: string;
@@ -50,8 +52,9 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
       
       console.log('✅ Contact saved to Android');
       return true;
-    } catch (e) {
-      console.error('❌ Failed to save contact:', e);
+    } catch (e: any) {
+      console.error('❌ Failed to save contact:', JSON.stringify(e));
+      console.error('❌ Contact error message:', e?.message || 'Unknown error');
       // Don't fail the whole operation if contacts fail
       return false;
     }
@@ -59,27 +62,37 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
 
   const saveToLeadsMetadata = async () => {
     try {
-      const response = await fetch('/api/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: phoneNumber,
-          contact_name: formData.name,
-          company: formData.company,
-          email: formData.email,
-          designation: formData.designation,
-          notes: formData.notes,
-        }),
+      // Get user ID from Supabase auth - REQUIRED for leads_metadata table
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('Authentication error:', JSON.stringify(authError));
+        throw new Error('You must be logged in to save leads');
+      }
+
+      console.log('✅ User authenticated:', user.id);
+
+      // Use direct Supabase client call instead of API route (Next.js static export doesn't support API routes)
+      const result = await createLead(user.id, {
+        phoneNumber: phoneNumber,
+        contactName: formData.name,
+        company: formData.company,
+        email: formData.email,
+        designation: formData.designation,
+        notes: formData.notes,
+        isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT',
+        isSyncedToLMS: false,
       });
 
-      if (!response.ok) {
+      if (!result) {
         throw new Error('Failed to save to leads_metadata');
       }
 
-      console.log('✅ Lead saved to database');
+      console.log('✅ Lead saved to database:', result.id);
       return true;
-    } catch (e) {
-      console.error('❌ Failed to save lead:', e);
+    } catch (e: any) {
+      console.error('❌ Failed to save lead:', JSON.stringify(e));
+      console.error('❌ Error message:', e?.message || 'Unknown error');
       throw e;
     }
   };
@@ -143,9 +156,11 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
       // Success!
       alert('✅ Lead added successfully!');
       onClose();
-    } catch (err) {
-      setError('Failed to save lead. Please try again.');
-      console.error('Save error:', err);
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Failed to save lead. Please try again.';
+      setError(errorMsg);
+      console.error('Save error:', JSON.stringify(err));
+      console.error('Save error message:', err?.message || 'Unknown error');
     } finally {
       setIsSaving(false);
     }

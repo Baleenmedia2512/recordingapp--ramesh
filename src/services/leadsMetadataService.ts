@@ -33,14 +33,16 @@ export async function getLeadByPhoneNumber(
     }
 
     return data as LeadMetadata;
-  } catch (error) {
-    console.error('Error getting lead by phone:', error);
+  } catch (error: any) {
+    console.error('Error getting lead by phone:', JSON.stringify(error));
+    console.error('Error message:', error?.message || 'Unknown error');
     return null;
   }
 }
 
 /**
  * Create a new lead
+ * NOTE: userId is required - user must be authenticated
  */
 export async function createLead(
   userId: string,
@@ -57,6 +59,10 @@ export async function createLead(
   }
 ): Promise<LeadMetadata | null> {
   try {
+    if (!userId) {
+      throw new Error('User ID is required to create a lead');
+    }
+
     const normalized = normalizePhoneNumber(leadData.phoneNumber);
 
     const { data, error } = await supabase
@@ -77,15 +83,22 @@ export async function createLead(
       .single();
 
     if (error) {
-      console.error('Error creating lead:', error);
-      throw error;
+      console.error('Error creating lead:', JSON.stringify(error));
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      throw new Error(`Failed to create lead: ${error.message || 'Unknown error'}`);
     }
 
     console.log('✅ Lead created in database:', data?.id);
     return data as LeadMetadata;
-  } catch (error) {
-    console.error('Error creating lead:', error);
-    return null;
+  } catch (error: any) {
+    console.error('Error creating lead:', JSON.stringify(error));
+    console.error('Error message:', error?.message || 'Unknown error');
+    throw error;
   }
 }
 
@@ -107,14 +120,15 @@ export async function updateLead(
       .single();
 
     if (error) {
-      console.error('Error updating lead:', error);
+      console.error('Error updating lead:', JSON.stringify(error));
       throw error;
     }
 
     console.log('✅ Lead updated:', leadId);
     return data as LeadMetadata;
-  } catch (error) {
-    console.error('Error updating lead:', error);
+  } catch (error: any) {
+    console.error('Error updating lead:', JSON.stringify(error));
+    console.error('Error message:', error?.message || 'Unknown error');
     return null;
   }
 }
@@ -138,14 +152,15 @@ export async function markLeadSyncedToLMS(
       .eq('user_id', userId);
 
     if (error) {
-      console.error('Error marking lead as synced:', error);
+      console.error('Error marking lead as synced:', JSON.stringify(error));
       return false;
     }
 
     console.log('✅ Lead marked as synced to LMS:', leadId);
     return true;
-  } catch (error) {
-    console.error('Error marking lead as synced:', error);
+  } catch (error: any) {
+    console.error('Error marking lead as synced:', JSON.stringify(error));
+    console.error('Error message:', error?.message || 'Unknown error');
     return false;
   }
 }
@@ -167,14 +182,15 @@ export async function markLeadInContacts(
       .eq('user_id', userId);
 
     if (error) {
-      console.error('Error marking lead in contacts:', error);
+      console.error('Error marking lead in contacts:', JSON.stringify(error));
       return false;
     }
 
     console.log('✅ Lead marked as in contacts:', leadId);
     return true;
-  } catch (error) {
-    console.error('Error marking lead in contacts:', error);
+  } catch (error: any) {
+    console.error('Error marking lead in contacts:', JSON.stringify(error));
+    console.error('Error message:', error?.message || 'Unknown error');
     return false;
   }
 }
@@ -191,13 +207,14 @@ export async function getAllLeads(userId: string): Promise<LeadMetadata[]> {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error getting all leads:', error);
+      console.error('Error getting all leads:', JSON.stringify(error));
       throw error;
     }
 
     return (data as LeadMetadata[]) || [];
-  } catch (error) {
-    console.error('Error getting all leads:', error);
+  } catch (error: any) {
+    console.error('Error getting all leads:', JSON.stringify(error));
+    console.error('Error message:', error?.message || 'Unknown error');
     return [];
   }
 }

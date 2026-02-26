@@ -30,52 +30,42 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, name: string): P
 
 /**
  * Check if phone number exists in Android Contacts
+ * OPTIMIZED: Uses native PhoneLookup API for instant results (~100ms)
  */
 async function checkInContacts(phoneNumber: string): Promise<{ found: boolean; name?: string }> {
   if (!Capacitor.isNativePlatform()) {
     console.log('⚠️ [Contacts] Not on native platform, skipping contacts check');
-    return { found: false };
+    return { found: false, name: undefined };
   }
 
   try {
-    console.log('🔍 [Contacts] Checking Android contacts for:', phoneNumber);
+    console.log('🔍 [Contacts] Fast lookup for:', phoneNumber);
+    
+    // Check permission first (instant check, no dialog)
     const { Contacts } = await import('@capacitor-community/contacts');
+    const permission = await Contacts.checkPermissions();
+    console.log('✅ [Contacts] Permission status:', permission.contacts);
     
-    // Request permission if needed
-    const permission = await Contacts.requestPermissions();
     if (permission.contacts !== 'granted') {
-      console.warn('⚠️ [Contacts] Permission not granted');
-      return { found: false };
+      console.warn('⚠️ [Contacts] Permission not granted:', permission.contacts);
+      console.warn('   Enable in: Settings → Apps → Call Monitor → Permissions → Contacts');
+      return { found: false, name: undefined };
     }
-
-    // Search for contact by phone number
-    const result = await Contacts.getContacts({
-      projection: {
-        name: true,
-        phones: true,
-      },
-    });
-
-    const normalizedSearch = normalizePhoneNumber(phoneNumber);
     
-    // Check if any contact has this phone number
-    for (const contact of result.contacts) {
-      if (contact.phones) {
-        for (const phone of contact.phones) {
-          const normalizedContactPhone = normalizePhoneNumber(phone.number || '');
-          if (normalizedContactPhone.includes(normalizedSearch) || normalizedSearch.includes(normalizedContactPhone)) {
-            console.log('✅ [Contacts] Found in contacts:', contact.name?.display);
-            return { found: true, name: contact.name?.display || undefined };
-          }
-        }
-      }
+    // Use native fast lookup (PhoneLookup API) - instant!
+    const { CallMonitor } = await import('../plugins/CallMonitorPlugin');
+    const result = await CallMonitor.lookupContactByPhone({ phoneNumber });
+    
+    if (result.found && result.name) {
+      console.log('✅ [Contacts] Found:', result.name);
+      return { found: true, name: result.name };
+    } else {
+      console.log('❌ [Contacts] Not found');
+      return { found: false, name: undefined };
     }
-
-    console.log('❌ [Contacts] Not found in contacts');
-    return { found: false };
-  } catch (error) {
-    console.error('❌ [Contacts] Error checking contacts:', error);
-    return { found: false };
+  } catch (error: any) {
+    console.error('❌ [Contacts] Error:', error);
+    return { found: false, name: undefined };
   }
 }
 
@@ -213,12 +203,43 @@ export async function lookupPhoneNumber(
   
   const normalized = normalizePhoneNumber(phoneNumber);
   
-  // Check sources (skip local leads if no userId)
-  const [contactsResult, leadsResult, lmsResult] = await Promise.all([
-    checkInContacts(normalized),
-    userId ? checkInLeads(normalized, userId) : Promise.resolve({ found: false, leadData: undefined }),
-    checkInLMS(normalized),
-  ]);
+  // Check sources with timeouts (skip local leads if no userId)
+  console.log('⏱️ [Phone Lookup] Starting parallel checks with 8s timeout...');
+  console.log('⏱️ [Phone Lookup] Time now:', new Date().toLocaleTimeString());
+  
+  let contactsResult: { found: boolean; name?: string };
+  let leadsResult: { found: boolean; leadData?: any };
+  let lmsResult: { found: boolean; lmsData?: any };
+  
+  try {
+    console.log('📞 [Phone Lookup] Starting Promise.all...');
+    [contactsResult, leadsResult, lmsResult] = await Promise.all([
+      withTimeout(checkInContacts(normalized), 8000, 'Contacts check').catch(err => {
+        console.error('❌ [Contacts] Timeout or error:', err.message);
+        return { found: false, name: undefined };
+      }),
+      userId 
+        ? withTimeout(checkInLeads(normalized, userId), 5000, 'Leads check').catch(err => {
+            console.error('❌ [Leads] Timeout or error:', err.message);
+            return { found: false, leadData: undefined };
+          })
+        : Promise.resolve({ found: false, leadData: undefined }),
+      withTimeout(checkInLMS(normalized), 8000, 'LMS check').catch(err => {
+        console.error('❌ [LMS] Timeout or error:', err.message);
+        return { found: false, lmsData: undefined };
+      }),
+    ]);
+    console.log('✅ [Phone Lookup] Promise.all completed!');
+  } catch (promiseAllError: any) {
+    console.error('❌ [Phone Lookup] Promise.all threw unexpected error:', promiseAllError);
+    // Return safe defaults
+    contactsResult = { found: false, name: undefined };
+    leadsResult = { found: false, leadData: undefined };
+    lmsResult = { found: false, lmsData: undefined };
+  }
+  
+  console.log('✅ [Phone Lookup] All checks completed (or timed out)');
+  console.log('⏱️ [Phone Lookup] Time now:', new Date().toLocaleTimeString());
 
   const result: PhoneNumberLookupResult = {
     phoneNumber: normalized,

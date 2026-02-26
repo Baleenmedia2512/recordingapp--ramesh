@@ -155,6 +155,17 @@ export interface CallMonitorPlugin {
     message: string;
   }>;
   
+  /**
+   * Fast contact lookup using PhoneLookup API
+   * Returns instantly (~100ms) instead of 4-5 seconds like getContacts()
+   */
+  lookupContactByPhone(options: {
+    phoneNumber: string;
+  }): Promise<{
+    found: boolean;
+    name?: string;
+  }>;
+  
   // Event listeners
   addListener(
     eventName: 'callLogChanged' | 'phoneStateChanged' | 'autoUploadStatus',

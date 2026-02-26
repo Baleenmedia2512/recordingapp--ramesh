@@ -7,6 +7,7 @@ import AddLeadModal from '@/components/AddLeadModal';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
+import { LocalNotifications } from '@capacitor/local-notifications';
 
 export default function Home() {
   const { 
@@ -77,6 +78,36 @@ export default function Home() {
 
     return () => {
       stateListener.then(listener => listener.remove());
+    };
+  }, []);
+
+  // Listen for notification actions (when user clicks notification)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    console.log('🔔 Setting up notification action listener...');
+    
+    const listener = LocalNotifications.addListener(
+      'localNotificationActionPerformed',
+      (notification) => {
+        console.log('🔔 [NOTIFICATION CLICK] Action performed:', JSON.stringify(notification));
+        const phoneNumber = notification.notification.extra?.phoneNumber;
+        const action = notification.notification.extra?.action;
+        
+        if (phoneNumber && action) {
+          console.log('📝 [NOTIFICATION CLICK] Opening modal for:', phoneNumber, 'action:', action);
+          setLeadPhoneNumber(phoneNumber);
+          setLeadActionType(action);
+          setShowAddLead(true);
+        } else {
+          console.warn('⚠️ [NOTIFICATION CLICK] Missing data - phoneNumber:', phoneNumber, 'action:', action);
+        }
+      }
+    );
+
+    return () => {
+      console.log('🔔 Removing notification action listener...');
+      listener.then(l => l.remove());
     };
   }, []);
 

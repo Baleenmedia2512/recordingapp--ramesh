@@ -239,4 +239,16 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
       message: 'Adding contacts is only supported on native platforms',
     };
   }
+
+  async lookupContactByPhone(options: {
+    phoneNumber: string;
+  }): Promise<{
+    found: boolean;
+    name?: string;
+  }> {
+    console.log('Web platform: lookupContactByPhone not supported', options);
+    return {
+      found: false,
+    };
+  }
 }
