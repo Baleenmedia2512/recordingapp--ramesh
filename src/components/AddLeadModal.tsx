@@ -38,26 +38,54 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const addToAndroidContacts = async () => {
-    if (!Capacitor.isNativePlatform()) return true;
+  const addToAndroidContacts = async (): Promise<{ success: boolean; message?: string }> => {
+    if (!Capacitor.isNativePlatform()) return { success: true };
 
     try {
-      // Call native plugin to add contact (uses Android ContactsContract API)
+      // Check WRITE_CONTACTS permission first
       const { CallMonitor } = await import('@/plugins/CallMonitorPlugin');
-      await CallMonitor.addContact({
+      const { Contacts } = await import('@capacitor-community/contacts');
+      
+      const permission = await Contacts.checkPermissions();
+      console.log('📱 Contact permission status:', permission);
+      
+      if (permission.contacts !== 'granted') {
+        console.log('📱 Requesting WRITE_CONTACTS permission...');
+        const requestResult = await Contacts.requestPermissions();
+        
+        if (requestResult.contacts !== 'granted') {
+          return {
+            success: false,
+            message: 'Permission denied: Cannot write to contacts. Please enable in Settings.'
+          };
+        }
+      }
+      
+      // Call native plugin to add contact (uses Android ContactsContract API)
+      const result = await CallMonitor.addContact({
         name: formData.name,
         phoneNumber: phoneNumber,
         email: formData.email || '',
         company: formData.company || '',
       });
       
-      console.log('✅ Contact saved to Android');
-      return true;
+      console.log('✅ Contact save result:', result);
+      
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.message || 'Failed to save contact'
+        };
+      }
+      
+      return { success: true };
     } catch (e: any) {
       console.error('❌ Failed to save contact:', JSON.stringify(e));
       console.error('❌ Contact error message:', e?.message || 'Unknown error');
-      // Don't fail the whole operation if contacts fail
-      return false;
+      return {
+        success: false,
+        message: e?.message || 'Unknown error saving contact'
+      };
     }
   };
 
@@ -75,7 +103,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
         email: formData.email,
         designation: formData.designation,
         notes: formData.notes,
-        isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT',
+        isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT' || actionType === 'add-all' || actionType === 'add-to-contacts' || actionType === 'add-to-db',
         isSyncedToLMS: false,
       });
 
@@ -103,7 +131,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           email: formData.email,
           designation: formData.designation,
           notes: formData.notes,
-          isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT',
+          isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT' || actionType === 'add-all' || actionType === 'add-to-contacts' || actionType === 'add-to-db',
           isSyncedToLMS: false,
         });
         
@@ -161,20 +189,33 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
     setError('');
 
     try {
-      // Normalize action type to handle both formats (add-all/ADD_BOTH, add-contact/ADD_CONTACT, add-lms/ADD_LMS)
-      const normalizedAction = actionType.toUpperCase().replace(/-/g, '_').replace('ALL', 'BOTH');
+      // Normalize action type to handle all formats:
+      // add-all/ADD_BOTH, add-to-contacts/ADD_CONTACT, add-to-lms/ADD_LMS, add-to-db/ADD_DB
+      const normalizedAction = actionType.toUpperCase().replace(/-/g, '_')
+        .replace('ADD_ALL', 'ADD_BOTH')
+        .replace('ADD_TO_CONTACTS', 'ADD_CONTACT')
+        .replace('ADD_TO_DB', 'ADD_DB')
+        .replace('ADD_TO_LMS', 'ADD_LMS');
       console.log('🔄 Normalized action:', actionType, '->', normalizedAction);
       
       // Perform actions based on actionType
+      let contactResult: { success: boolean; message?: string } = { success: true };
+      
       if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_CONTACT') {
         console.log('📱 Adding to Android contacts...');
-        await addToAndroidContacts();
+        contactResult = await addToAndroidContacts();
+        
+        if (!contactResult.success) {
+          throw new Error(`Contact save failed: ${contactResult.message}`);
+        }
       }
 
-      if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_LMS') {
-        console.log('💾 Saving to leads metadata and LMS...');
+      if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_LMS' || normalizedAction === 'ADD_DB') {
+        console.log('💾 Saving to leads metadata and database...');
         await saveToLeadsMetadata();
-        await syncToLMS();
+        if (normalizedAction !== 'ADD_DB') {
+          await syncToLMS();
+        }
       }
 
       // Success! Check if offline
@@ -218,9 +259,11 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           {/* Action Info */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
             <p className="text-sm text-blue-800">
-              {(actionType === 'ADD_BOTH' || actionType === 'add-all') && '📱 Will save to: Phone Contacts + LMS Database'}
-              {(actionType === 'ADD_CONTACT' || actionType === 'add-contact') && '📱 Will save to: Phone Contacts only'}
-              {(actionType === 'ADD_LMS' || actionType === 'add-lms') && '🏢 Will save to: LMS Database only'}
+              {(actionType === 'ADD_BOTH' || actionType === 'add-all') && '📱 Will save to: Phone Contacts + Database'}
+              {(actionType === 'ADD_CONTACT' || actionType === 'add-to-contacts') && '📱 Will save to: Phone Contacts only'}
+              {(actionType === 'ADD_LMS' || actionType === 'add-to-lms') && '🏢 Will save to: LMS Database only'}
+              {(actionType === 'ADD_DB' || actionType === 'add-to-db') && '💾 Will save to: Database only'}
+              {actionType === 'already-exists' && '✅ Already saved in both places'}
             </p>
           </div>
 

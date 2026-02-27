@@ -21,7 +21,8 @@ export const LMS_CONFIG = {
   timeWindowMinutes: 3, // Match calls within ±3 minutes
   
   // Enable/disable LMS integration
-  enabled: process.env.NEXT_PUBLIC_LMS_ENABLED !== 'false', // Enabled by default
+  // DISABLED: Set to false to skip LMS checks and avoid timeouts
+  enabled: false, // Change to true when LMS server is configured
   
   // Use Edge Function for server-side LMS API calls (recommended for mobile)
   // When true, the mobile app skips direct LMS API calls and relies on Supabase Edge Function

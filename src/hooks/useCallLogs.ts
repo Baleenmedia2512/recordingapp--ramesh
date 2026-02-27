@@ -507,7 +507,7 @@ export const useCallLogs = () => {
               } else {
                 // Case 2: Phone number NOT available - wait and get from call log
                 console.log('⏳ [DELAYED] No phone number in event, will get from call log after 3s...');
-                setTimeout(async () => {
+                activeTimeoutId.current = window.setTimeout(async () => {
                   try {
                     console.log('🔍 [DELAYED] Refreshing call logs to get phone number...');
                     await fetchCallLogs(filters, true, true);
@@ -573,6 +573,9 @@ export const useCallLogs = () => {
                     }
                   } catch (error) {
                     console.error('❌ [DELAYED] Error showing notification:', error);
+                  } finally {
+                    // Clear timeout ref after delayed lookup completes
+                    activeTimeoutId.current = null;
                   }
                 }, 3000); // Wait 3s for Android to write CallLog
               }

@@ -30,8 +30,43 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, name: string): P
 }
 
 /**
+ * Generate alternative phone number formats for better matching
+ * Indian numbers can be stored as: 9360515518, 919360515518, +919360515518
+ */
+function getPhoneNumberVariants(phoneNumber: string): string[] {
+  const normalized = normalizePhoneNumber(phoneNumber);
+  const variants: string[] = [normalized];
+  
+  // If starts with country code (91 for India), add version without it
+  if (normalized.startsWith('91') && normalized.length > 10) {
+    variants.push(normalized.substring(2)); // Remove 91
+  }
+  
+  // If doesn't have country code and is 10 digits, add version with country code
+  if (!normalized.startsWith('91') && normalized.length === 10) {
+    variants.push('91' + normalized);
+  }
+  
+  // Add +91 version
+  if (normalized.startsWith('91')) {
+    variants.push('+' + normalized);
+  } else if (normalized.length === 10) {
+    variants.push('+91' + normalized);
+  }
+  
+  // Always add last 10 digits version (most common format)
+  if (normalized.length > 10) {
+    variants.push(normalized.substring(normalized.length - 10));
+  }
+  
+  // Remove duplicates
+  return [...new Set(variants)];
+}
+
+/**
  * Check if phone number exists in Android Contacts
  * OPTIMIZED: Uses native PhoneLookup API for instant results (~100ms)
+ * ENHANCED: Tries multiple phone number formats for better matching
  */
 async function checkInContacts(phoneNumber: string): Promise<{ found: boolean; name?: string }> {
   if (!Capacitor.isNativePlatform()) {
@@ -53,17 +88,24 @@ async function checkInContacts(phoneNumber: string): Promise<{ found: boolean; n
       return { found: false, name: undefined };
     }
     
-    // Use native fast lookup (PhoneLookup API) - instant!
-    const { CallMonitor } = await import('../plugins/CallMonitorPlugin');
-    const result = await CallMonitor.lookupContactByPhone({ phoneNumber });
+    // Generate multiple phone number formats to try
+    const variants = getPhoneNumberVariants(phoneNumber);
+    console.log('🔍 [Contacts] Trying formats:', variants);
     
-    if (result.found && result.name) {
-      console.log('✅ [Contacts] Found:', result.name);
-      return { found: true, name: result.name };
-    } else {
-      console.log('❌ [Contacts] Not found');
-      return { found: false, name: undefined };
+    // Try each variant until we find a match
+    const { CallMonitor } = await import('../plugins/CallMonitorPlugin');
+    
+    for (const variant of variants) {
+      const result = await CallMonitor.lookupContactByPhone({ phoneNumber: variant });
+      
+      if (result.found && result.name) {
+        console.log(`✅ [Contacts] Found with format "${variant}":`, result.name);
+        return { found: true, name: result.name };
+      }
     }
+    
+    console.log('❌ [Contacts] Not found in any format');
+    return { found: false, name: undefined };
   } catch (error: any) {
     console.error('❌ [Contacts] Error:', error);
     return { found: false, name: undefined };
@@ -77,13 +119,15 @@ async function checkInLeads(phoneNumber: string, userId?: string): Promise<{ fou
   try {
     console.log('🔍 [Leads] Checking leads_metadata table for:', phoneNumber);
     
-    const normalized = normalizePhoneNumber(phoneNumber);
+    // Try multiple phone number formats
+    const variants = getPhoneNumberVariants(phoneNumber);
+    console.log('🔍 [Leads] Trying formats:', variants);
     
-    // Query leads_metadata table
+    // Query leads_metadata table with OR condition for all variants
     let query = supabase
       .from('leads_metadata')
       .select('*')
-      .eq('phone_number', normalized);
+      .or(variants.map(v => `phone_number.eq.${v}`).join(','));
     
     // Add user filter if userId provided
     if (userId) {
@@ -218,7 +262,7 @@ export async function lookupPhoneNumber(
   const normalized = normalizePhoneNumber(phoneNumber);
   
   // Check sources with timeouts (skip local leads if no userId)
-  console.log('⏱️ [Phone Lookup] Starting parallel checks with 8s timeout...');
+  console.log('⏱️ [Phone Lookup] Starting parallel checks...');
   console.log('⏱️ [Phone Lookup] Time now:', new Date().toLocaleTimeString());
   
   let contactsResult: { found: boolean; name?: string };
@@ -228,7 +272,7 @@ export async function lookupPhoneNumber(
   try {
     console.log('📞 [Phone Lookup] Starting Promise.all...');
     [contactsResult, leadsResult, lmsResult] = await Promise.all([
-      withTimeout(checkInContacts(normalized), 8000, 'Contacts check').catch(err => {
+      withTimeout(checkInContacts(normalized), 25000, 'Contacts check').catch(err => {
         console.error('❌ [Contacts] Timeout or error:', err.message);
         return { found: false, name: undefined };
       }),
@@ -278,68 +322,55 @@ export async function lookupPhoneNumber(
 /**
  * Get notification message based on where phone was found
  * 
- * Logic:
- * 1. NOT in LMS AND NOT in contacts → "Add as Lead and contact book?"
- * 2. In leads table BUT NOT in contacts → "Add as contact book?"
- * 3. In contacts BUT NOT in LMS → "Add to LMS?"
- * 4. In BOTH contacts AND LMS → "Already available in phone and LMS"
+ * 4 CASES:
+ * 1. ✅ In BOTH contacts AND database → Present in both
+ * 2. ❌ ONLY in database (NOT in contacts) → Present only in DB, add to contacts?
+ * 3. ❌ ONLY in contacts (NOT in database) → Present only in contacts, add to DB?
+ * 4. ❌ NOT in either → Not present, add as lead?
+ * 
+ * Note: LMS sync happens silently in Android background after recording upload
  */
 export function getNotificationMessage(lookup: PhoneNumberLookupResult): {
   title: string;
   message: string;
-  action: 'add-all' | 'add-to-contacts' | 'add-to-lms' | 'already-exists' | 'sync-to-lms';
+  action: 'add-all' | 'add-to-contacts' | 'add-to-lms' | 'already-exists' | 'sync-to-lms' | 'add-to-db';
 } {
-  const { foundInContacts, foundInLeads, foundInLMS, contactName, leadData, lmsData } = lookup;
+  const { foundInContacts, foundInLeads, contactName, leadData } = lookup;
 
-  // Case 1: Found in BOTH contacts AND LMS → Already available
-  if (foundInContacts && foundInLMS) {
+  // Get display name (from contacts, or leads table, or just phone number)
+  const displayName = contactName || leadData?.contact_name || lookup.phoneNumber;
+
+  // Case 1: ✅ Present in BOTH contacts AND database
+  if (foundInContacts && foundInLeads) {
     return {
-      title: '✅ Already Available',
-      message: `${contactName || lmsData?.leadName || 'This number'} is already available in phone contacts and LMS`,
+      title: '✅ Present in Both',
+      message: `${displayName} is in contacts and database`,
       action: 'already-exists',
     };
   }
 
-  // Case 2: Found in leads table BUT NOT in contacts → Add as contact book
-  if (foundInLeads && !foundInContacts) {
+  // Case 2: ❌ Present ONLY in database (NOT in contacts)
+  if (foundInLeads && !foundInContacts && leadData) {
     return {
-      title: '📱 Add to Contact Book?',
-      message: `${leadData?.contact_name || lookup.phoneNumber} is in your leads table. Add to phone contacts?`,
+      title: '📱 Only in Database',
+      message: `${displayName} - Add to contacts?`,
       action: 'add-to-contacts',
     };
   }
 
-  // Case 3: Found in contacts BUT NOT in LMS → Add to LMS
-  if (foundInContacts && !foundInLMS) {
+  // Case 3: ❌ Present ONLY in contacts (NOT in database)
+  if (foundInContacts && !foundInLeads) {
     return {
-      title: '🏢 Add to LMS?',
-      message: `${contactName} is in your contacts. Add to LMS as a lead?`,
-      action: 'add-to-lms',
+      title: '💾 Only in Contacts',
+      message: `${displayName} - Add to database?`,
+      action: 'add-to-db',
     };
   }
-
-  // Case 4: Found in LMS but NOT in contacts (not in leads either)
-  if (foundInLMS && !foundInContacts && !foundInLeads) {
-    return {
-      title: '📱 Add to Contact Book?',
-      message: `${lmsData?.leadName || lookup.phoneNumber} is in LMS. Add to phone contacts?`,
-      action: 'add-to-contacts',
-    };
-  }
-
-  // Case 5: Found in leads and contacts but NOT in LMS → Sync to LMS
-  if (foundInLeads && foundInContacts && !foundInLMS) {
-    return {
-      title: '🏢 Sync to LMS?',
-      message: `${leadData?.contact_name || contactName} is in your contacts and leads. Sync to LMS?`,
-      action: 'sync-to-lms',
-    };
-  }
-
-  // Case 6: NOT found in LMS AND NOT in contacts → Add as Lead and contact book
+  
+  // Case 4: ❌ NOT present in database AND contacts
   return {
-    title: '➕ Add as Lead?',
-    message: `${lookup.phoneNumber} not found. Add as lead and contact book?`,
+    title: '➕ Not in DB or Contacts',
+    message: `${displayName} - Add as lead?`,
     action: 'add-all',
   };
 }
