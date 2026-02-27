@@ -34,9 +34,17 @@ const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
     }
   };
 
-  const handleGuestLogin = () => {
-    guestLogin();
-    onSuccess?.();
+  const handleGuestLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await guestLogin();
+      onSuccess?.();
+    } catch (err: any) {
+      setError(err.message || 'Failed to create guest session');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

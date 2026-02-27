@@ -7,6 +7,7 @@ import { AddLeadFormData } from '@/types';
 import { addToAndroidContacts } from './androidContacts';
 import { createLead, updateLead, getLeadByPhoneNumber } from './leadsMetadataService';
 import { showToast } from './leadNotificationService';
+import { ensureAuth } from '@/lib/autoAuth';
 
 /**
  * Sync lead to external LMS
@@ -89,6 +90,18 @@ export async function saveLeadToAllSources(
     addToLeads: formData.addToLeads,
     syncToLMS: formData.syncToLMS,
   });
+
+  // Ensure we have valid authentication before proceeding
+  try {
+    const authenticatedUserId = await ensureAuth();
+    console.log('✅ [Save Lead] Auth verified:', authenticatedUserId);
+    // Use the authenticated user ID instead of passed userId
+    userId = authenticatedUserId;
+  } catch (error) {
+    console.error('❌ [Save Lead] Auth check failed:', error);
+    result.errors.push('Authentication failed');
+    return result;
+  }
 
   // Step 1: Add to Android Contacts (if requested)
   if (formData.addToContacts) {

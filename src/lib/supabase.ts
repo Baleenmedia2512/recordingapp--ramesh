@@ -20,6 +20,31 @@ const finalKey = isMockMode ? 'mock-key' : SUPABASE_ANON_KEY;
 
 console.log('🔍 Final URL:', finalUrl);
 
+// Custom fetch with timeout to prevent hanging on offline devices
+const fetchWithTimeout = async (url: RequestInfo | URL, options: RequestInit = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.warn('⏱️ [Supabase] Request timeout after 5s:', url);
+    controller.abort();
+  }, 5000); // 5 second timeout for all Supabase requests
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error('❌ [Supabase] Request aborted (timeout or offline)');
+      throw new Error('Network timeout - device may be offline');
+    }
+    throw error;
+  }
+};
+
 export const supabase = createClient(finalUrl, finalKey, {
   auth: {
     persistSession: true,
@@ -29,6 +54,7 @@ export const supabase = createClient(finalUrl, finalKey, {
     headers: {
       'X-Client-Info': 'call-monitor-app',
     },
+    fetch: fetchWithTimeout, // Use custom fetch with timeout
   },
   db: {
     schema: 'public',

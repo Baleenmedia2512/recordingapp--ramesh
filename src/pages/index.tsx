@@ -8,6 +8,9 @@ import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { initializeAutoAuth } from '@/lib/autoAuth';
+import { autoSyncIfOnline } from '@/lib/offlineSync';
+import { useStore } from '@/store';
 
 export default function Home() {
   const { 
@@ -19,11 +22,42 @@ export default function Home() {
   } = usePermissions();
   
   const { lmsStatus, initializeLMSHttpServer } = useLMSIntegration();
+  const { setUser } = useStore();
   
   const [appReady, setAppReady] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [showAddLead, setShowAddLead] = useState(false);
   const [leadPhoneNumber, setLeadPhoneNumber] = useState<string>('');
   const [leadActionType, setLeadActionType] = useState<string>('');
+
+  // Auto-authenticate on app start (no login required)
+  useEffect(() => {
+    const setupAuth = async () => {
+      try {
+        console.log('🔐 Starting auto-authentication...');
+        const authResult = await initializeAutoAuth();
+        console.log('✅ Auto-authenticated:', authResult.userId);
+        
+        // Update store with authenticated user
+        setUser({
+          id: authResult.userId,
+          email: authResult.email,
+          full_name: 'Call Monitor User',
+          isGuest: false,
+        });
+        
+        // Mark auth as ready
+        setAuthReady(true);
+        console.log('✅ Auth ready for database operations');
+      } catch (error) {
+        console.error('❌ Auto-auth failed:', error);
+        // Still mark as ready so app doesn't hang
+        setAuthReady(true);
+      }
+    };
+
+    setupAuth();
+  }, [setUser]);
 
   // Track app initialization time for performance and initialize LMS
   useEffect(() => {
@@ -73,6 +107,12 @@ export default function Home() {
       if (state.isActive) {
         console.log('📱 App became active, checking for pending notification...');
         checkPendingLeadNotification();
+        
+        // Try to sync offline queue when app resumes
+        console.log('🔄 App resumed, attempting offline queue sync...');
+        autoSyncIfOnline().catch(err => {
+          console.log('⚠️ Auto-sync skipped:', err?.message || 'Still offline');
+        });
       }
     });
 

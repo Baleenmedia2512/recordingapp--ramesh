@@ -6,7 +6,8 @@
 import React, { useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { createLead } from '@/services/leadsMetadataService';
-import { supabase } from '@/lib/supabase';
+import { ensureAuth } from '@/lib/autoAuth';
+import { addToOfflineQueue, recordSupabaseError, isLikelyOffline, getQueueCount } from '@/lib/offlineQueue';
 
 interface AddLeadModalProps {
   phoneNumber: string;
@@ -62,18 +63,12 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
 
   const saveToLeadsMetadata = async () => {
     try {
-      // Get user ID from Supabase auth - REQUIRED for leads_metadata table
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error('Authentication error:', JSON.stringify(authError));
-        throw new Error('You must be logged in to save leads');
-      }
+      // Use auto-auth to ensure we have a valid session
+      const userId = await ensureAuth();
+      console.log('✅ [Add Lead Modal] Auth verified:', userId);
 
-      console.log('✅ User authenticated:', user.id);
-
-      // Use direct Supabase client call instead of API route (Next.js static export doesn't support API routes)
-      const result = await createLead(user.id, {
+      // Try to save to database
+      const result = await createLead(userId, {
         phoneNumber: phoneNumber,
         contactName: formData.name,
         company: formData.company,
@@ -93,6 +88,29 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
     } catch (e: any) {
       console.error('❌ Failed to save lead:', JSON.stringify(e));
       console.error('❌ Error message:', e?.message || 'Unknown error');
+      
+      // If error is network timeout, save to offline queue
+      if (e?.message?.includes('timeout') || e?.message?.includes('offline')) {
+        console.log('📦 [Add Lead Modal] Device offline - saving to local queue');
+        recordSupabaseError(e);
+        
+        // Get userId for offline queue
+        const userId = await ensureAuth();
+        addToOfflineQueue(userId, {
+          phoneNumber: phoneNumber,
+          contactName: formData.name,
+          company: formData.company,
+          email: formData.email,
+          designation: formData.designation,
+          notes: formData.notes,
+          isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT',
+          isSyncedToLMS: false,
+        });
+        
+        console.log('✅ [Add Lead Modal] Saved to offline queue - will sync when online');
+        return true; // Return success since we saved locally
+      }
+      
       throw e;
     }
   };
@@ -143,18 +161,31 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
     setError('');
 
     try {
+      // Normalize action type to handle both formats (add-all/ADD_BOTH, add-contact/ADD_CONTACT, add-lms/ADD_LMS)
+      const normalizedAction = actionType.toUpperCase().replace(/-/g, '_').replace('ALL', 'BOTH');
+      console.log('🔄 Normalized action:', actionType, '->', normalizedAction);
+      
       // Perform actions based on actionType
-      if (actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT') {
+      if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_CONTACT') {
+        console.log('📱 Adding to Android contacts...');
         await addToAndroidContacts();
       }
 
-      if (actionType === 'ADD_BOTH' || actionType === 'ADD_LMS') {
+      if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_LMS') {
+        console.log('💾 Saving to leads metadata and LMS...');
         await saveToLeadsMetadata();
         await syncToLMS();
       }
 
-      // Success!
-      alert('✅ Lead added successfully!');
+      // Success! Check if offline
+      const offline = isLikelyOffline();
+      const queueCount = getQueueCount();
+      
+      if (offline && queueCount > 0) {
+        alert(`✅ Lead saved locally (offline mode)\n📦 ${queueCount} items pending sync when online`);
+      } else {
+        alert('✅ Lead added successfully!');
+      }
       onClose();
     } catch (err: any) {
       const errorMsg = err?.message || 'Failed to save lead. Please try again.';
@@ -187,9 +218,9 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           {/* Action Info */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
             <p className="text-sm text-blue-800">
-              {actionType === 'ADD_BOTH' && '📱 Will save to: Phone Contacts + LMS Database'}
-              {actionType === 'ADD_CONTACT' && '📱 Will save to: Phone Contacts only'}
-              {actionType === 'ADD_LMS' && '🏢 Will save to: LMS Database only'}
+              {(actionType === 'ADD_BOTH' || actionType === 'add-all') && '📱 Will save to: Phone Contacts + LMS Database'}
+              {(actionType === 'ADD_CONTACT' || actionType === 'add-contact') && '📱 Will save to: Phone Contacts only'}
+              {(actionType === 'ADD_LMS' || actionType === 'add-lms') && '🏢 Will save to: LMS Database only'}
             </p>
           </div>
 

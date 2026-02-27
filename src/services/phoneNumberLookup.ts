@@ -7,6 +7,7 @@ import { PhoneNumberLookupResult } from '@/types';
 import { Capacitor } from '@capacitor/core';
 import { supabase } from '@/lib/supabase';
 import LMS_CONFIG from '@/config/lms.config';
+import { ensureAuth } from '@/lib/autoAuth';
 
 /**
  * Normalize phone number for comparison
@@ -199,7 +200,20 @@ export async function lookupPhoneNumber(
   userId?: string
 ): Promise<PhoneNumberLookupResult> {
   console.log('🔍 [Phone Lookup] Starting comprehensive lookup for:', phoneNumber);
-  console.log('🔍 [Phone Lookup] User ID:', userId || 'No user (app without login)');
+  console.log('🔍 [Phone Lookup] User ID provided:', userId || 'None');
+  
+  // Ensure we have authentication
+  if (!userId) {
+    try {
+      userId = await ensureAuth();
+      console.log('✅ [Phone Lookup] Auto-authenticated with user ID:', userId);
+    } catch (error) {
+      console.error('❌ [Phone Lookup] Auto-auth failed:', error);
+      // Continue without userId - will skip leads database check
+    }
+  }
+  
+  console.log('🔍 [Phone Lookup] Using User ID:', userId || 'No user (will skip leads check)');
   
   const normalized = normalizePhoneNumber(phoneNumber);
   
