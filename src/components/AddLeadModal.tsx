@@ -44,6 +44,17 @@ interface FormData {
 }
 
 const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, onClose }) => {
+  // Normalize phone number - remove country code (91) if present
+  const normalizePhoneNumber = (phone: string): string => {
+    if (!phone) return phone;
+    const trimmed = phone.trim();
+    // If phone starts with 91 and is longer than 10 digits, remove 91 prefix
+    if (trimmed.startsWith('91') && trimmed.length > 10) {
+      return trimmed.substring(2);
+    }
+    return trimmed;
+  };
+  
   // Get current date and time
   const now = new Date();
   const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -134,9 +145,18 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
       const userId = await ensureAuth();
       console.log('✅ [Add Lead Modal] Auth verified:', userId);
 
+      // Normalize phone numbers before saving
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      const normalizedAlternatePhone = formData.alternatePhone ? normalizePhoneNumber(formData.alternatePhone) : '';
+      
+      console.log('📞 Phone normalization:', phoneNumber, '→', normalizedPhone);
+      if (formData.alternatePhone) {
+        console.log('📞 Alternate phone normalization:', formData.alternatePhone, '→', normalizedAlternatePhone);
+      }
+
       // Try to save to database
       const result = await createLead(userId, {
-        phoneNumber: phoneNumber,
+        phoneNumber: normalizedPhone,
         contactName: formData.name,
         company: formData.company,
         email: formData.email,
@@ -146,7 +166,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
         leadTime: formData.leadTime,
         clientPlatform: formData.clientPlatform,
         adEnquiry: formData.adEnquiry,
-        alternatePhone: formData.alternatePhone,
+        alternatePhone: normalizedAlternatePhone,
         address: formData.address,
         city: formData.city,
         state: formData.state,
@@ -172,10 +192,14 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
         console.log('📦 [Add Lead Modal] Device offline - saving to local queue');
         recordSupabaseError(e);
         
+        // Normalize phone numbers before saving to offline queue
+        const normalizedPhone = normalizePhoneNumber(phoneNumber);
+        const normalizedAlternatePhone = formData.alternatePhone ? normalizePhoneNumber(formData.alternatePhone) : '';
+        
         // Get userId for offline queue
         const userId = await ensureAuth();
         addToOfflineQueue(userId, {
-          phoneNumber: phoneNumber,
+          phoneNumber: normalizedPhone,
           contactName: formData.name,
           company: formData.company,
           email: formData.email,
@@ -185,7 +209,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           leadTime: formData.leadTime,
           clientPlatform: formData.clientPlatform,
           adEnquiry: formData.adEnquiry,
-          alternatePhone: formData.alternatePhone,
+          alternatePhone: normalizedAlternatePhone,
           address: formData.address,
           city: formData.city,
           state: formData.state,
@@ -209,6 +233,10 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
       const SUPABASE_URL = 'https://wkwrrdcjknvupwsfdjtd.supabase.co';
       const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indrd3JyZGNqa252dXB3c2ZkanRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NDI2OTIsImV4cCI6MjA4MzQxODY5Mn0.nMYFs8RtopRXN5MzDHfsMIiFoTbwTloACdgpIWk3UgA';
       
+      // Normalize phone numbers before syncing
+      const normalizedPhone = normalizePhoneNumber(phoneNumber);
+      const normalizedAlternatePhone = formData.alternatePhone ? normalizePhoneNumber(formData.alternatePhone) : '';
+      
       const response = await fetch(`${SUPABASE_URL}/functions/v1/sync-lms-lead`, {
         method: 'POST',
         headers: {
@@ -216,7 +244,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          phone: phoneNumber,
+          phone: normalizedPhone,
           leadName: formData.name,
           company: formData.company,
           email: formData.email,
@@ -226,7 +254,7 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           leadTime: formData.leadTime,
           clientPlatform: formData.clientPlatform,
           adEnquiry: formData.adEnquiry,
-          alternatePhone: formData.alternatePhone,
+          alternatePhone: normalizedAlternatePhone,
           address: formData.address,
           city: formData.city,
           state: formData.state,
