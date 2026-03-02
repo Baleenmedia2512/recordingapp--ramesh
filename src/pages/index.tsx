@@ -4,6 +4,7 @@ import { useLMSIntegration } from '@/hooks/useLMSIntegration';
 import Dashboard from '@/components/Dashboard';
 import PermissionsManager from '@/components/PermissionsManager';
 import AddLeadModal from '@/components/AddLeadModal';
+import { BackgroundServiceControl } from '@/components/BackgroundServiceControl';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { CallMonitor } from '@/plugins/CallMonitorPlugin';
@@ -238,6 +239,11 @@ export default function Home() {
             {/* Show permissions manager on native platforms */}
             {Capacitor.isNativePlatform() && (
               <PermissionsManager />
+            )}
+            
+            {/* Background Monitoring Service Control (Native only) */}
+            {Capacitor.isNativePlatform() && allRequiredGranted && (
+              <BackgroundServiceControl />
             )}
             
             {/* Show dashboard when permissions are granted or on web */}

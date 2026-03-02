@@ -251,4 +251,29 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
       found: false,
     };
   }
+  
+  async startMonitoringService(): Promise<{ success: boolean; message: string }> {
+    console.log('Web platform: startMonitoringService not supported');
+    return { success: false, message: 'Not supported on web' };
+  }
+  
+  async stopMonitoringService(): Promise<{ success: boolean; message: string }> {
+    console.log('Web platform: stopMonitoringService not supported');
+    return { success: false, message: 'Not supported on web' };
+  }
+  
+  async isMonitoringServiceRunning(): Promise<{ running: boolean }> {
+    console.log('Web platform: isMonitoringServiceRunning not supported');
+    return { running: false };
+  }
+  
+  async requestBatteryOptimizationExemption(): Promise<{ granted: boolean; message: string }> {
+    console.log('Web platform: requestBatteryOptimizationExemption not supported');
+    return { granted: true, message: 'Not applicable on web' };
+  }
+  
+  async isBatteryOptimizationDisabled(): Promise<{ disabled: boolean }> {
+    console.log('Web platform: isBatteryOptimizationDisabled not supported');
+    return { disabled: true };
+  }
 }

@@ -53,6 +53,17 @@ export async function createLead(
     email?: string;
     designation?: string;
     notes?: string;
+    leadDate?: string;
+    leadTime?: string;
+    clientPlatform?: string;
+    adEnquiry?: string;
+    alternatePhone?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    remarks?: string;
+    handledBy?: string;
     isInContacts?: boolean;
     isSyncedToLMS?: boolean;
     lmsLeadId?: string;
@@ -75,6 +86,17 @@ export async function createLead(
         email: leadData.email || null,
         designation: leadData.designation || null,
         notes: leadData.notes || null,
+        lead_date: leadData.leadDate || null,
+        lead_time: leadData.leadTime || null,
+        client_platform: leadData.clientPlatform || null,
+        ad_enquiry: leadData.adEnquiry || null,
+        alternate_phone: leadData.alternatePhone || null,
+        address: leadData.address || null,
+        city: leadData.city || null,
+        state: leadData.state || null,
+        pincode: leadData.pincode || null,
+        remarks: leadData.remarks || null,
+        handled_by: leadData.handledBy || null,
         is_in_contacts: leadData.isInContacts || false,
         is_synced_to_lms: leadData.isSyncedToLMS || false,
         lms_lead_id: leadData.lmsLeadId || null,

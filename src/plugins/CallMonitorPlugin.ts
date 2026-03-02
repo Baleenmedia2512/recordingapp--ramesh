@@ -166,6 +166,30 @@ export interface CallMonitorPlugin {
     name?: string;
   }>;
   
+  // Service control methods
+  startMonitoringService(): Promise<{
+    success: boolean;
+    message: string;
+  }>;
+  
+  stopMonitoringService(): Promise<{
+    success: boolean;
+    message: string;
+  }>;
+  
+  isMonitoringServiceRunning(): Promise<{
+    running: boolean;
+  }>;
+  
+  requestBatteryOptimizationExemption(): Promise<{
+    granted: boolean;
+    message: string;
+  }>;
+  
+  isBatteryOptimizationDisabled(): Promise<{
+    disabled: boolean;
+  }>;
+  
   // Event listeners
   addListener(
     eventName: 'callLogChanged' | 'phoneStateChanged' | 'autoUploadStatus',

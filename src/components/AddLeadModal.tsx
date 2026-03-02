@@ -16,19 +16,58 @@ interface AddLeadModalProps {
 }
 
 interface FormData {
+  // Basic Info
+  leadDate: string;
+  leadTime: string;
+  clientPlatform: string;
   name: string;
-  company: string;
+  
+  // Contact Details
   email: string;
+  alternatePhone: string;
+  
+  // Business Info
+  company: string;
   designation: string;
+  adEnquiry: string;
+  
+  // Address
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  
+  // Additional
+  remarks: string;
+  handledBy: string;
   notes: string;
 }
 
 const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, onClose }) => {
+  // Get current date and time
+  const now = new Date();
+  const currentDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const currentTime = now.toTimeString().slice(0, 5); // HH:MM
+  
+  // Get user email from localStorage (set during login)
+  const userEmail = typeof window !== 'undefined' ? localStorage.getItem('userEmail') || '' : '';
+  
   const [formData, setFormData] = useState<FormData>({
+    leadDate: currentDate,
+    leadTime: currentTime,
+    clientPlatform: '',
     name: '',
-    company: '',
     email: '',
+    alternatePhone: '',
+    company: '',
     designation: '',
+    adEnquiry: '',
+    address: '',
+    city: '',
+    state: '',
+    pincode: '',
+    remarks: '',
+    handledBy: userEmail,
     notes: '',
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -103,6 +142,17 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
         email: formData.email,
         designation: formData.designation,
         notes: formData.notes,
+        leadDate: formData.leadDate,
+        leadTime: formData.leadTime,
+        clientPlatform: formData.clientPlatform,
+        adEnquiry: formData.adEnquiry,
+        alternatePhone: formData.alternatePhone,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        pincode: formData.pincode,
+        remarks: formData.remarks,
+        handledBy: formData.handledBy,
         isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT' || actionType === 'add-all' || actionType === 'add-to-contacts' || actionType === 'add-to-db',
         isSyncedToLMS: false,
       });
@@ -131,6 +181,17 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           email: formData.email,
           designation: formData.designation,
           notes: formData.notes,
+          leadDate: formData.leadDate,
+          leadTime: formData.leadTime,
+          clientPlatform: formData.clientPlatform,
+          adEnquiry: formData.adEnquiry,
+          alternatePhone: formData.alternatePhone,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          pincode: formData.pincode,
+          remarks: formData.remarks,
+          handledBy: formData.handledBy,
           isInContacts: actionType === 'ADD_BOTH' || actionType === 'ADD_CONTACT' || actionType === 'add-all' || actionType === 'add-to-contacts' || actionType === 'add-to-db',
           isSyncedToLMS: false,
         });
@@ -161,6 +222,17 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           email: formData.email,
           designation: formData.designation,
           notes: formData.notes,
+          leadDate: formData.leadDate,
+          leadTime: formData.leadTime,
+          clientPlatform: formData.clientPlatform,
+          adEnquiry: formData.adEnquiry,
+          alternatePhone: formData.alternatePhone,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          pincode: formData.pincode,
+          remarks: formData.remarks,
+          handledBy: formData.handledBy,
         }),
       });
 
@@ -180,8 +252,37 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validation
     if (!formData.name.trim()) {
-      setError('Name is required');
+      setError('Client Name is required');
+      return;
+    }
+    
+    if (formData.name.length > 100) {
+      setError('Client Name must be 100 characters or less');
+      return;
+    }
+    
+    if (!formData.clientPlatform) {
+      setError('Client Platform is required');
+      return;
+    }
+    
+    // Validate alternate phone if provided (must be 10 digits)
+    if (formData.alternatePhone && !/^\d{10}$/.test(formData.alternatePhone)) {
+      setError('Alternate Phone must be exactly 10 digits');
+      return;
+    }
+    
+    // Validate pincode if provided (must be 6 digits)
+    if (formData.pincode && !/^\d{6}$/.test(formData.pincode)) {
+      setError('Pincode must be exactly 6 digits');
+      return;
+    }
+    
+    // Validate remarks length
+    if (formData.remarks.length > 500) {
+      setError('Remarks must be 500 characters or less');
       return;
     }
 
@@ -276,78 +377,277 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name */}
+            {/* Date and Time Row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={formData.leadDate}
+                  onChange={(e) => handleChange('leadDate', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  disabled={isSaving}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Time <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="time"
+                  value={formData.leadTime}
+                  onChange={(e) => handleChange('leadTime', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  disabled={isSaving}
+                />
+              </div>
+            </div>
+
+            {/* Client Platform */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Name <span className="text-red-500">*</span>
+                Client Platform <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.clientPlatform}
+                onChange={(e) => handleChange('clientPlatform', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                required
+                disabled={isSaving}
+              >
+                <option value="">Select Platform</option>
+                <option value="Google">Google</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Instagram">Instagram</option>
+                <option value="LinkedIn">LinkedIn</option>
+                <option value="Website">Website</option>
+                <option value="Referral">Referral</option>
+                <option value="Cold Call">Cold Call</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            {/* Client Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Client Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => handleChange('name', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter contact name"
+                placeholder="Enter client name (max 100 characters)"
+                maxLength={100}
                 required
                 disabled={isSaving}
               />
+              <p className="text-xs text-gray-500 mt-1">{formData.name.length}/100 characters</p>
             </div>
 
-            {/* Company */}
+            {/* Ad Enquiry */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Company
+                Ad Enquiry
               </label>
-              <input
-                type="text"
-                value={formData.company}
-                onChange={(e) => handleChange('company', e.target.value)}
+              <textarea
+                value={formData.adEnquiry}
+                onChange={(e) => handleChange('adEnquiry', e.target.value)}
+                rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Company name"
+                placeholder="What are they enquiring about?"
                 disabled={isSaving}
               />
             </div>
 
-            {/* Email */}
+            {/* Client Contact (read-only, from phoneNumber prop) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
+                Client Contact <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="tel"
+                value={phoneNumber}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 cursor-not-allowed"
+                disabled
+                readOnly
+              />
+            </div>
+
+            {/* Email and Alternate Phone Row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange('email', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="email@example.com"
+                  disabled={isSaving}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Alternate Phone
+                </label>
+                <input
+                  type="tel"
+                  value={formData.alternatePhone}
+                  onChange={(e) => handleChange('alternatePhone', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="10 digits"
+                  maxLength={10}
+                  pattern="\d{10}"
+                  disabled={isSaving}
+                />
+              </div>
+            </div>
+
+            {/* Company and Designation Row */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Company
+                </label>
+                <input
+                  type="text"
+                  value={formData.company}
+                  onChange={(e) => handleChange('company', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Company name"
+                  disabled={isSaving}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Designation
+                </label>
+                <input
+                  type="text"
+                  value={formData.designation}
+                  onChange={(e) => handleChange('designation', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Job title"
+                  disabled={isSaving}
+                />
+              </div>
+            </div>
+
+            {/* Address Section */}
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">Address</h3>
+              
+              {/* Street Address */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Street Address
+                </label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => handleChange('address', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Building, Street"
+                  disabled={isSaving}
+                />
+              </div>
+
+              {/* City, State, Pincode Row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => handleChange('city', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="City"
+                    disabled={isSaving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => handleChange('state', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="State"
+                    disabled={isSaving}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pincode
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.pincode}
+                    onChange={(e) => handleChange('pincode', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="6 digits"
+                    maxLength={6}
+                    pattern="\d{6}"
+                    disabled={isSaving}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Remarks */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Remarks
+              </label>
+              <textarea
+                value={formData.remarks}
+                onChange={(e) => handleChange('remarks', e.target.value)}
+                rows={3}
+                maxLength={500}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Additional remarks (max 500 characters)..."
+                disabled={isSaving}
+              />
+              <p className="text-xs text-gray-500 mt-1">{formData.remarks.length}/500 characters</p>
+            </div>
+
+            {/* Handled By */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Handled By
               </label>
               <input
                 type="email"
-                value={formData.email}
-                onChange={(e) => handleChange('email', e.target.value)}
+                value={formData.handledBy}
+                onChange={(e) => handleChange('handledBy', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="email@example.com"
+                placeholder="Your email"
                 disabled={isSaving}
               />
             </div>
 
-            {/* Designation */}
+            {/* Old Notes field (keeping for backward compatibility) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Designation
-              </label>
-              <input
-                type="text"
-                value={formData.designation}
-                onChange={(e) => handleChange('designation', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Job title"
-                disabled={isSaving}
-              />
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
+                Additional Notes
               </label>
               <textarea
                 value={formData.notes}
                 onChange={(e) => handleChange('notes', e.target.value)}
-                rows={3}
+                rows={2}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Additional notes..."
+                placeholder="Any other notes..."
                 disabled={isSaving}
               />
             </div>

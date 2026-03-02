@@ -96,6 +96,17 @@ export interface LeadMetadata {
   email?: string;
   designation?: string;
   notes?: string;
+  lead_date?: string;
+  lead_time?: string;
+  client_platform?: string;
+  ad_enquiry?: string;
+  alternate_phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  remarks?: string;
+  handled_by?: string;
   is_synced_to_lms: boolean;
   lms_lead_id?: string;
   is_in_contacts: boolean;
