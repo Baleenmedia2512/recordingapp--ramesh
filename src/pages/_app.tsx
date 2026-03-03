@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Preferences } from '@capacitor/preferences';
 import { testLMSConnection } from '@/services/lmsApi';
 import { startQueueManager } from '@/services/uploadQueueManager';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
@@ -17,6 +18,35 @@ export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     // Initialize Capacitor plugins
     if (Capacitor.isNativePlatform()) {
+      // Store Supabase credentials in SharedPreferences for native code access
+      // IMPORTANT: Use native method instead of Preferences to ensure immediate persistence
+      (async () => {
+        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+          try {
+            console.log('📝 Saving Supabase credentials via native method...');
+            console.log('📝 SUPABASE_URL:', SUPABASE_URL);
+            console.log('📝 SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY.substring(0, 30) + '...');
+            
+            // Call native method to save credentials directly to SharedPreferences
+            const result = await CallMonitor.saveSupabaseCredentials({
+              supabaseUrl: SUPABASE_URL,
+              supabaseKey: SUPABASE_ANON_KEY
+            });
+            
+            console.log('✅ Native save result:', result);
+            console.log('✅ Supabase credentials saved to native SharedPreferences');
+            console.log('✅ PhoneLookupWorker will now be able to access credentials');
+          } catch (error) {
+            console.error('❌ Failed to save Supabase credentials via native method:', error);
+            console.error('❌ PhoneLookupWorker will NOT be able to access database');
+          }
+        } else {
+          console.warn('⚠️ Supabase credentials not available!');
+          console.warn('⚠️ SUPABASE_URL:', SUPABASE_URL);
+          console.warn('⚠️ SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? 'EXISTS' : 'MISSING');
+        }
+      })();
+      
       // Set status bar style
       StatusBar.setStyle({ style: Style.Dark });
       StatusBar.setBackgroundColor({ color: '#0ea5e9' });

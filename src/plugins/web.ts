@@ -212,6 +212,20 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
     };
   }
 
+  async saveSupabaseCredentials(options: {
+    supabaseUrl: string;
+    supabaseKey: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    console.log('Web platform: saveSupabaseCredentials not required (credentials already in memory)', options);
+    return {
+      success: true,
+      message: 'Credentials saved in memory (web platform)',
+    };
+  }
+
   async checkPendingLeadNotification(): Promise<{
     hasPending: boolean;
     phoneNumber?: string;

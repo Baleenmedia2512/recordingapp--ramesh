@@ -126,6 +126,20 @@ export interface CallMonitorPlugin {
     storagePath: string;
   }>;
   
+  /**
+   * Save Supabase credentials directly to native SharedPreferences
+   * This ensures PhoneLookupWorker can access credentials from native code
+   * @param options.supabaseUrl - Supabase project URL
+   * @param options.supabaseKey - Supabase anon/public key
+   */
+  saveSupabaseCredentials(options: {
+    supabaseUrl: string;
+    supabaseKey: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+  }>;
+  
   // Sync methods
   syncCallLogs(options: { logs: any[] }): Promise<{ success: boolean }>;
   
