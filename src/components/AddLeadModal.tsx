@@ -3,8 +3,10 @@
  * Simplified form for adding leads from notification clicks
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { Contacts } from '@capacitor-community/contacts';
+import { supabase } from '@/lib/supabase';
 import { createLead } from '@/services/leadsMetadataService';
 import { ensureAuth } from '@/lib/autoAuth';
 import { addToOfflineQueue, recordSupabaseError, isLikelyOffline, getQueueCount } from '@/lib/offlineQueue';
@@ -83,6 +85,136 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string>('');
+  const [isAutoFilling, setIsAutoFilling] = useState(false);
+
+  // Helper function: Check if phone exists in device contacts
+  const checkDeviceContacts = async (phone: string): Promise<{ name: string } | null> => {
+    if (!Capacitor.isNativePlatform()) return null;
+    
+    try {
+      // Check READ_CONTACTS permission
+      const permission = await Contacts.checkPermissions();
+      if (permission.contacts !== 'granted') {
+        const requestResult = await Contacts.requestPermissions();
+        if (requestResult.contacts !== 'granted') {
+          console.log('📱 Contacts permission denied - skipping auto-fill');
+          return null;
+        }
+      }
+
+      // Search contacts by phone number
+      const result = await Contacts.getContacts({
+        projection: {
+          name: true,
+          phones: true,
+        },
+      });
+
+      const normalizedSearchPhone = normalizePhoneNumber(phone);
+      
+      // Find matching contact by normalized phone
+      for (const contact of result.contacts) {
+        if (contact.phones && contact.phones.length > 0) {
+          for (const phoneEntry of contact.phones) {
+            const normalizedContactPhone = normalizePhoneNumber(phoneEntry.number || '');
+            if (normalizedContactPhone === normalizedSearchPhone) {
+              const contactName = contact.name?.display || contact.name?.given || '';
+              if (contactName) {
+                console.log('✅ Found in contacts:', contactName);
+                return { name: contactName };
+              }
+            }
+          }
+        }
+      }
+      
+      console.log('📱 Phone not found in contacts');
+      return null;
+    } catch (e: any) {
+      console.error('❌ Error checking contacts:', e?.message);
+      return null;
+    }
+  };
+
+  // Helper function: Check if phone exists in leads_metadata database
+  const checkLeadsDatabase = async (phone: string): Promise<{ name: string } | null> => {
+    try {
+      const normalizedPhone = normalizePhoneNumber(phone);
+      
+      // Query leads_metadata for existing lead with this phone
+      const { data, error } = await supabase
+        .from('leads_metadata')
+        .select('contact_name')
+        .eq('phone_number', normalizedPhone)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows found - expected, not an error
+          console.log('📊 Phone not found in database');
+        } else {
+          console.error('❌ Database query error:', error.message);
+        }
+        return null;
+      }
+
+      if (data && data.contact_name) {
+        console.log('✅ Found in database:', data.contact_name);
+        return { name: data.contact_name };
+      }
+
+      return null;
+    } catch (e: any) {
+      console.error('❌ Error checking database:', e?.message);
+      return null;
+    }
+  };
+
+  // Auto-fill effect: Check contacts and database when modal opens
+  useEffect(() => {
+    const autoFillLeadData = async () => {
+      if (!phoneNumber || isAutoFilling) return;
+      
+      setIsAutoFilling(true);
+      console.log('🔍 Auto-filling lead data for:', phoneNumber);
+
+      try {
+        // Priority 1: Check device contacts
+        const contactData = await checkDeviceContacts(phoneNumber);
+        if (contactData && contactData.name) {
+          console.log('✅ Auto-filled from contacts:', contactData.name);
+          setFormData(prev => ({
+            ...prev,
+            name: contactData.name,
+          }));
+          setIsAutoFilling(false);
+          return;
+        }
+
+        // Priority 2: Check leads_metadata database
+        const dbData = await checkLeadsDatabase(phoneNumber);
+        if (dbData && dbData.name) {
+          console.log('✅ Auto-filled from database:', dbData.name);
+          setFormData(prev => ({
+            ...prev,
+            name: dbData.name,
+          }));
+          setIsAutoFilling(false);
+          return;
+        }
+
+        console.log('ℹ️ No existing data found - form remains empty');
+      } catch (e: any) {
+        console.error('❌ Auto-fill error:', e?.message);
+      } finally {
+        setIsAutoFilling(false);
+      }
+    };
+
+    autoFillLeadData();
+  }, [phoneNumber]); // Only run when phoneNumber changes
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
