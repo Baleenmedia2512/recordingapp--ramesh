@@ -107,6 +107,7 @@ export async function showLeadNotification(
             body: notification.message,
             largeBody: notification.message,
             summaryText: 'Call Monitor',
+            channelId: 'call_monitor_channel', // IMPORTANT: Must match MainActivity channel
             actionTypeId: notification.action,
             extra: {
               phoneNumber: lookupResult.phoneNumber,

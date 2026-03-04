@@ -3,6 +3,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useLMSIntegration } from '@/hooks/useLMSIntegration';
 import Dashboard from '@/components/Dashboard';
 import PermissionsManager from '@/components/PermissionsManager';
+import { PermissionDebugger } from '@/components/PermissionDebugger';
 import AddLeadModal from '@/components/AddLeadModal';
 import { BackgroundServiceControl } from '@/components/BackgroundServiceControl';
 import { Capacitor } from '@capacitor/core';
@@ -274,7 +275,10 @@ export default function Home() {
 
             {/* Show permissions manager on native platforms */}
             {Capacitor.isNativePlatform() && (
-              <PermissionsManager />
+              <>
+                <PermissionsManager />
+                <PermissionDebugger />
+              </>
             )}
             
             {/* Background Monitoring Service Control (Native only) */}
