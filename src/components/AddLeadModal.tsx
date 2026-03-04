@@ -451,17 +451,27 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
 
     try {
       // Normalize action type to handle all formats:
-      // add-all/ADD_BOTH, add-to-contacts/ADD_CONTACT, add-to-lms/ADD_LMS, add-to-db/ADD_DB
+      // add-all/ADD_BOTH/ADD_NEW, add-to-contacts/ADD_CONTACT, add-to-lms/ADD_LMS, add-to-db/ADD_DB
       const normalizedAction = actionType.toUpperCase().replace(/-/g, '_')
         .replace('ADD_ALL', 'ADD_BOTH')
+        .replace('ADD_NEW', 'ADD_BOTH')  // Treat ADD_NEW as ADD_BOTH
         .replace('ADD_TO_CONTACTS', 'ADD_CONTACT')
         .replace('ADD_TO_DB', 'ADD_DB')
         .replace('ADD_TO_LMS', 'ADD_LMS');
       console.log('🔄 Normalized action:', actionType, '->', normalizedAction);
       
+      // Validate action type
+      const validActions = ['ADD_BOTH', 'ADD_CONTACT', 'ADD_DB', 'ADD_LMS', 'ALREADY_EXISTS', 'SYNC_TO_LMS'];
+      if (!validActions.includes(normalizedAction)) {
+        console.error('⚠️ Unknown action type:', normalizedAction, '- defaulting to ADD_BOTH');
+        // Default to ADD_BOTH if unknown action
+      }
+      
       // Perform actions based on actionType
       let contactResult: { success: boolean; message?: string } = { success: true };
+      let didSaveAnything = false;
       
+      // Step 1: Add to contacts if needed
       if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_CONTACT') {
         console.log('📱 Adding to Android contacts...');
         contactResult = await addToAndroidContacts();
@@ -469,14 +479,26 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
         if (!contactResult.success) {
           throw new Error(`Contact save failed: ${contactResult.message}`);
         }
+        didSaveAnything = true;
       }
 
-      if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_LMS' || normalizedAction === 'ADD_DB') {
+      // Step 2: Save to database (for ADD_BOTH, ADD_CONTACT, ADD_LMS, ADD_DB)
+      // ADD_CONTACT should also update DB to mark is_in_contacts=true
+      if (normalizedAction === 'ADD_BOTH' || normalizedAction === 'ADD_CONTACT' || normalizedAction === 'ADD_LMS' || normalizedAction === 'ADD_DB') {
         console.log('💾 Saving to leads metadata and database...');
         await saveToLeadsMetadata();
-        if (normalizedAction !== 'ADD_DB') {
+        didSaveAnything = true;
+        
+        // Step 3: Sync to LMS (only if not ADD_DB or ADD_CONTACT)
+        if (normalizedAction !== 'ADD_DB' && normalizedAction !== 'ADD_CONTACT') {
+          console.log('🌐 Syncing to LMS...');
           await syncToLMS();
         }
+      }
+      
+      // Validation: If nothing was saved, show error
+      if (!didSaveAnything && normalizedAction !== 'ALREADY_EXISTS') {
+        throw new Error(`No save action performed for: ${normalizedAction}`);
       }
 
       // Success! Check if offline
@@ -520,11 +542,11 @@ const AddLeadModal: React.FC<AddLeadModalProps> = ({ phoneNumber, actionType, on
           {/* Action Info */}
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
             <p className="text-sm text-blue-800">
-              {(actionType === 'ADD_BOTH' || actionType === 'add-all') && '📱 Will save to: Phone Contacts + Database'}
-              {(actionType === 'ADD_CONTACT' || actionType === 'add-to-contacts') && '📱 Will save to: Phone Contacts only'}
-              {(actionType === 'ADD_LMS' || actionType === 'add-to-lms') && '🏢 Will save to: LMS Database only'}
+              {(actionType === 'ADD_BOTH' || actionType === 'add-all' || actionType === 'ADD_NEW') && '📱 Will save to: Phone Contacts + Database + LMS'}
+              {(actionType === 'ADD_CONTACT' || actionType === 'add-to-contacts') && '📱 Will save to: Phone Contacts + Database (update)'}
+              {(actionType === 'ADD_LMS' || actionType === 'add-to-lms') && '🏢 Will save to: Database + LMS'}
               {(actionType === 'ADD_DB' || actionType === 'add-to-db') && '💾 Will save to: Database only'}
-              {actionType === 'already-exists' && '✅ Already saved in both places'}
+              {(actionType === 'already-exists' || actionType === 'ALREADY_EXISTS') && '✅ Already saved in both places'}
             </p>
           </div>
 
