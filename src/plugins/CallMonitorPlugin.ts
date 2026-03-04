@@ -154,9 +154,14 @@ export interface CallMonitorPlugin {
   // Lead management methods
   checkPendingLeadNotification(): Promise<{
     hasPending: boolean;
-    phoneNumber?: string;
-    actionType?: string;
-    timestamp?: number;
+    data?: {
+      phoneNumber: string;
+      action: string;
+      foundInContacts?: boolean;
+      foundInLeads?: boolean;
+      foundInLMS?: boolean;
+      leadName?: string;
+    };
   }>;
   
   addContact(options: {

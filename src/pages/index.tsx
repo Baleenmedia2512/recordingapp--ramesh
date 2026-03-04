@@ -85,10 +85,10 @@ export default function Home() {
     try {
       const result = await CallMonitor.checkPendingLeadNotification();
       
-      if (result.hasPending && result.phoneNumber) {
-        console.log('📝 Opening AddLeadForm for:', result.phoneNumber);
-        setLeadPhoneNumber(result.phoneNumber);
-        setLeadActionType(result.actionType || 'ADD_BOTH');
+      if (result.hasPending && result.data) {
+        console.log('📝 Opening AddLeadForm for:', result.data.phoneNumber);
+        setLeadPhoneNumber(result.data.phoneNumber);
+        setLeadActionType(result.data.action || 'ADD_BOTH');
         setShowAddLead(true);
       }
     } catch (e) {
@@ -149,6 +149,42 @@ export default function Home() {
     return () => {
       console.log('🔔 Removing notification action listener...');
       listener.then(l => l.remove());
+    };
+  }, []);
+
+  // Listen for native notification clicks (from PhoneLookupWorker)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    console.log('📱 Setting up native notification click listener...');
+    
+    const handleNotificationClick = (event: any) => {
+      console.log('🔔 [NATIVE NOTIFICATION] Received click event:', event);
+      
+      try {
+        const data = typeof event.detail === 'string' ? JSON.parse(event.detail) : event.detail;
+        const phoneNumber = data?.phoneNumber;
+        const action = data?.action;
+        
+        if (phoneNumber && action) {
+          console.log('📝 [NATIVE NOTIFICATION] Opening form for:', phoneNumber, 'action:', action);
+          setLeadPhoneNumber(phoneNumber);
+          setLeadActionType(action);
+          setShowAddLead(true);
+        } else {
+          console.warn('⚠️ [NATIVE NOTIFICATION] Missing data - phoneNumber:', phoneNumber, 'action:', action);
+        }
+      } catch (error) {
+        console.error('❌ [NATIVE NOTIFICATION] Error parsing event:', error);
+      }
+    };
+
+    // Listen for custom event from MainActivity
+    window.addEventListener('notificationClicked', handleNotificationClick);
+
+    return () => {
+      console.log('🔔 Removing native notification click listener...');
+      window.removeEventListener('notificationClicked', handleNotificationClick);
     };
   }, []);
 

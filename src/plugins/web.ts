@@ -228,9 +228,14 @@ export class CallMonitorWeb extends WebPlugin implements CallMonitorPlugin {
 
   async checkPendingLeadNotification(): Promise<{
     hasPending: boolean;
-    phoneNumber?: string;
-    actionType?: string;
-    timestamp?: number;
+    data?: {
+      phoneNumber: string;
+      action: string;
+      foundInContacts?: boolean;
+      foundInLeads?: boolean;
+      foundInLMS?: boolean;
+      leadName?: string;
+    };
   }> {
     console.log('Web platform: checkPendingLeadNotification not supported');
     return {

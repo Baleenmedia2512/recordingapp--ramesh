@@ -35,6 +35,14 @@ export async function showLeadNotification(
     return;
   }
 
+  // On Android, the native PhoneLookupWorker handles notifications in background
+  // Skip web layer notification to avoid duplicates
+  if (Capacitor.getPlatform() === 'android') {
+    console.log('ℹ️ [showLeadNotification] Android detected - native worker handles notifications');
+    console.log('ℹ️ [showLeadNotification] Skipping web notification to avoid duplicates');
+    return;
+  }
+
   console.log('✅ [showLeadNotification] On native platform, proceeding...');
   
   try {
