@@ -4,8 +4,8 @@
  */
 
 export const LMS_CONFIG = {
-  // Your LMS domain - UPDATE THIS!
-  baseUrl: process.env.NEXT_PUBLIC_LMS_URL || 'http://localhost:3000',
+  // Your LMS domain - Production fallback to deployed LMS
+  baseUrl: process.env.NEXT_PUBLIC_LMS_URL || 'https://e2wleadmanager.vercel.app',
   
   // API key for authentication (must match LMS .env)
   apiKey: process.env.NEXT_PUBLIC_LMS_API_KEY || 'CallMonitor-LMS-SecretKey-2026-Feb-Random-789xyz',
@@ -21,8 +21,8 @@ export const LMS_CONFIG = {
   timeWindowMinutes: 3, // Match calls within ±3 minutes
   
   // Enable/disable LMS integration
-  // DISABLED: Set to false to skip LMS checks and avoid timeouts
-  enabled: false, // Change to true when LMS server is configured
+  // ENABLED: LMS integration is active by default
+  enabled: process.env.NEXT_PUBLIC_LMS_ENABLED !== 'false', // Enabled by default
   
   // Use Edge Function for server-side LMS API calls (recommended for mobile)
   // When true, the mobile app skips direct LMS API calls and relies on Supabase Edge Function
