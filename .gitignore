@@ -41,7 +41,6 @@ ios/
 
 # IDE
 .vscode/
-.vs/
 .idea/
 *.swp
 *.swo
