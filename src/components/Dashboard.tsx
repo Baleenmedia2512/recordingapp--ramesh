@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useCallLogs } from '@/hooks/useCallLogs';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useLeadManagement } from '@/hooks/useLeadManagement';
+import { useStore } from '@/store';
 import { CallLog, CallType } from '@/types';
 import CallLogItem from './CallLogItem';
 import CallLogFilters from './CallLogFilters';
@@ -32,6 +33,7 @@ const Dashboard: React.FC = () => {
     handleFormCancel,
   } = useLeadManagement();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const { filters } = useStore();
 
   const handlePlayRecording = (log: CallLog) => {
     if (log.recording_url) {
@@ -39,12 +41,56 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // Sort call logs in reverse chronological order (newest first)
+  // Apply filters to call logs
+  const filteredLogs = useMemo(() => {
+    let filtered = [...callLogs];
+    
+    // Filter by call type
+    if (filters.callType && filters.callType !== 'all') {
+      filtered = filtered.filter(log => log.call_type === filters.callType);
+    }
+    
+    // Filter by search query (phone number or contact name)
+    if (filters.searchQuery && filters.searchQuery.trim()) {
+      const query = filters.searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(log => 
+        log.phone_number?.toLowerCase().includes(query) ||
+        log.contact_name?.toLowerCase().includes(query)
+      );
+    }
+    
+    // Filter by date range - from
+    if (filters.dateFrom) {
+      const fromDate = new Date(filters.dateFrom).setHours(0, 0, 0, 0);
+      filtered = filtered.filter(log => {
+        const logDate = new Date(log.timestamp).setHours(0, 0, 0, 0);
+        return logDate >= fromDate;
+      });
+    }
+    
+    // Filter by date range - to
+    if (filters.dateTo) {
+      const toDate = new Date(filters.dateTo).setHours(23, 59, 59, 999);
+      filtered = filtered.filter(log => {
+        const logDate = new Date(log.timestamp).getTime();
+        return logDate <= toDate;
+      });
+    }
+    
+    // Filter by recording presence
+    if (filters.hasRecording !== undefined) {
+      filtered = filtered.filter(log => log.has_recording === filters.hasRecording);
+    }
+    
+    return filtered;
+  }, [callLogs, filters]);
+
+  // Sort filtered call logs in reverse chronological order (newest first)
   const sortedCallLogs = useMemo(() => {
-    return [...callLogs].sort((a, b) => {
+    return [...filteredLogs].sort((a, b) => {
       return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
-  }, [callLogs]);
+  }, [filteredLogs]);
 
   // Get the timestamp of the most recent call for comparison
   const mostRecentTimestamp = useMemo(() => {
