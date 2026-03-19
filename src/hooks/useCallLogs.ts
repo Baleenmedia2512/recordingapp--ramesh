@@ -12,11 +12,14 @@ import { lookupPhoneNumber } from '@/services/phoneNumberLookup';
 import { showLeadNotification } from '@/services/leadNotificationService';
 
 // Performance constants
+const INITIAL_CALL_LOG_LIMIT = 20; // Optimized: Load only 20 calls initially (was 100)
 const LOAD_TIMEOUT_MS = 3000; // 3 second timeout for loading
 const AUTO_REFRESH_INTERVAL_MS = 30000; // 30 seconds
 const CALL_END_REFRESH_DELAY_MS = 2000; // Wait for call log to be written
-const BLOB_FETCH_TIMEOUT_MS = 8000; // 8 second timeout for blob fetch (reduced from 15s)
-const MAX_UPLOAD_RETRIES = 5; // Reduced from 10 to 5 for faster failure detection
+const BLOB_FETCH_TIMEOUT_MS = 5000; // 5 second timeout for blob fetch (reduced from 8s)
+const MAX_UPLOAD_RETRIES = 3; // Reduced from 5 for faster failure detection
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minute cache TTL
+const PAGE_SIZE = 20; // Pagination size for "Load More"
 
 // Mock data for testing
 const mockCallLogs: CallLog[] = [
@@ -91,6 +94,9 @@ export const useCallLogs = () => {
   const [newCallsCount, setNewCallsCount] = useState(0);
   const [loadTime, setLoadTime] = useState<number | null>(null);
   const [isSlowLoad, setIsSlowLoad] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const eventListenerRef = useRef<any>(null);
   const autoRefreshIntervalRef = useRef<any>(null);
   const previousCallLogsRef = useRef<CallLog[]>([]);
@@ -101,6 +107,9 @@ export const useCallLogs = () => {
   const lookupCache = useRef<Map<string, any>>(new Map()); // Cache phone lookup results during call
   const processingCallEnd = useRef<boolean>(false); // Prevent duplicate call_ended processing
   const activeTimeoutId = useRef<number | null>(null); // Track active setTimeout ID
+  
+  // Performance optimization: Simple in-memory cache with timestamp
+  const callLogsCache = useRef<{ data: CallLog[]; timestamp: number } | null>(null);
 
   // Helper to gracefully handle missing data
   const sanitizeCallLog = (log: any): CallLog => {
@@ -138,6 +147,23 @@ export const useCallLogs = () => {
     }
     setError(null);
     
+    // ✅ PERFORMANCE: Check cache first (unless force refresh)
+    if (!forceRefresh && callLogsCache.current) {
+      const cacheAge = Date.now() - callLogsCache.current.timestamp;
+      if (cacheAge < CACHE_TTL_MS) {
+        console.log(`✨ Using cached call logs (age: ${Math.round(cacheAge / 1000)}s)`);
+        setCallLogs(callLogsCache.current.data);
+        setLastUpdated(new Date(callLogsCache.current.timestamp));
+        if (!silent) {
+          setIsLoading(false);
+          setLoadTime(performance.now() - loadStartTimeRef.current);
+        }
+        return;
+      } else {
+        console.log('🔄 Cache expired, fetching fresh data...');
+      }
+    }
+    
     // Set up timeout warning for slow loads
     const slowLoadTimeout = setTimeout(() => {
       if (!silent) {
@@ -159,8 +185,8 @@ export const useCallLogs = () => {
             }
           }
           
-          console.log('Fetching call logs from native plugin...');
-          const result = await CallMonitor.getCallLogs({ limit: 100, forceRefresh });
+          console.log(`Fetching call logs from native plugin (limit: ${INITIAL_CALL_LOG_LIMIT} for performance)...`);
+          const result = await CallMonitor.getCallLogs({ limit: INITIAL_CALL_LOG_LIMIT, forceRefresh });
           console.log('Native plugin result:', result);
           const nativeLogs = result.callLogs || [];
           
@@ -201,6 +227,16 @@ export const useCallLogs = () => {
           callLogsRef.current = transformedLogs;
           setCallLogs(transformedLogs);
           setLastUpdated(new Date());
+          
+          // ✅ PERFORMANCE: Cache the results
+          callLogsCache.current = {
+            data: transformedLogs,
+            timestamp: Date.now()
+          };
+          console.log(`💾 Cached ${transformedLogs.length} call logs`);
+          
+          // Update pagination state
+          setHasMore(transformedLogs.length >= INITIAL_CALL_LOG_LIMIT);
           
           clearTimeout(slowLoadTimeout);
           if (!silent) {
@@ -865,6 +901,54 @@ export const useCallLogs = () => {
     fetchCallLogs(filters);
   }, [filters, fetchCallLogs]);
 
+  // ✅ PERFORMANCE: Load more calls (pagination)
+  const loadMoreCallLogs = useCallback(async () => {
+    if (isLoadingMore || !hasMore || !Capacitor.isNativePlatform()) {
+      return;
+    }
+
+    setIsLoadingMore(true);
+    try {
+      const nextPage = currentPage + 1;
+      console.log(`📄 Loading page ${nextPage} (offset: ${nextPage * PAGE_SIZE})...`);
+      
+      const result = await CallMonitor.getCallLogs({
+        limit: PAGE_SIZE,
+        offset: nextPage * PAGE_SIZE,
+        forceRefresh: false
+      });
+
+      const newLogs = (result.callLogs || []).map((log: any) => sanitizeCallLog({
+        ...log,
+        user_id: user?.id,
+        device_platform: log.device_platform || Capacitor.getPlatform(),
+      }));
+
+      console.log(`✅ Loaded ${newLogs.length} more calls`);
+
+      if (newLogs.length < PAGE_SIZE) {
+        setHasMore(false);
+        console.log('📭 No more calls to load');
+      }
+
+      // Append to existing logs
+      const updatedLogs = [...callLogs, ...newLogs];
+      setCallLogs(updatedLogs);
+      callLogsRef.current = updatedLogs;
+      setCurrentPage(nextPage);
+
+      // Update cache with new data
+      callLogsCache.current = {
+        data: updatedLogs,
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      console.error('Error loading more calls:', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMore, currentPage, callLogs, user]);
+
   return {
     callLogs,
     isLoading,
@@ -875,5 +959,10 @@ export const useCallLogs = () => {
     newCallsCount,
     loadTime,
     isSlowLoad,
+    // Pagination support
+    loadMoreCallLogs,
+    hasMore,
+    isLoadingMore,
+    currentPage,
   };
 };
